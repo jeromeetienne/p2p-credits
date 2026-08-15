@@ -23,6 +23,11 @@ import type { SimulationParameters } from '../../src/index.js';
  *
  * At the tick in the middle of the run, every worker adds a second device the network has never seen. The device
  * table at the end of the report then shows what each account handed to that new device.
+ *
+ * A result is a vector of four numbers, and two genuine executions of the same task differ by up to one ten
+ * thousandth, because no two executions of an inference are identical. Each task type is compared in its own way, so
+ * that the three comparisons can be watched side by side in one run: the reference task by a numerical tolerance,
+ * task A by a canonical form kept to two decimals, and task B by the angle between the two vectors.
  */
 export const firstSimulationParameters: SimulationParameters = {
 	randomSeed: 20260815,
@@ -33,6 +38,46 @@ export const firstSimulationParameters: SimulationParameters = {
 	recentErrorValidationRate: 0.9,
 	untrustedThreshold: 0,
 	recentErrorTickCount: 20,
+	defaultComparisonStrategy: {
+		strategyName: 'exact',
+		numericalTolerance: 0,
+		decimalCount: 6,
+		similarityThreshold: 1,
+	},
+	taskTypeComparisonStrategies: [
+		{
+			taskTypeName: 'reference task',
+			comparisonStrategy: {
+				strategyName: 'numerical tolerance',
+				numericalTolerance: 0.001,
+				decimalCount: 6,
+				similarityThreshold: 1,
+			},
+		},
+		{
+			taskTypeName: 'task A',
+			comparisonStrategy: {
+				strategyName: 'normalized hash',
+				numericalTolerance: 0,
+				decimalCount: 2,
+				similarityThreshold: 1,
+			},
+		},
+		{
+			taskTypeName: 'task B',
+			comparisonStrategy: {
+				strategyName: 'similarity score',
+				numericalTolerance: 0,
+				decimalCount: 6,
+				similarityThreshold: 0.9999,
+			},
+		},
+	],
+	resolutionMethodName: 'trust weighted',
+	minimumVoteWeight: 1,
+	trustedArbiterShare: 0.5,
+	resultVectorLength: 4,
+	honestNoiseRatio: 0.0001,
 	honestWorkerCount: 20,
 	unstableWorkerCount: 4,
 	unstableErrorProbability: 0.05,
@@ -72,4 +117,22 @@ export const firstSimulationParameters: SimulationParameters = {
 	minimumTrust: -20,
 	maximumTrust: 100,
 	trustedThreshold: 10,
+};
+
+/**
+ * The same scenario, with one single change: every task type is compared character for character.
+ *
+ * Two genuine executions of the same task never write the same numbers, so this run shows what a network costs its
+ * honest workers when it knows only how to compare exactly. It is run beside the first one to make that price
+ * visible, and nothing else about the scenario moves.
+ */
+export const exactComparisonParameters: SimulationParameters = {
+	...firstSimulationParameters,
+	defaultComparisonStrategy: {
+		strategyName: 'exact',
+		numericalTolerance: 0,
+		decimalCount: 6,
+		similarityThreshold: 1,
+	},
+	taskTypeComparisonStrategies: [],
 };

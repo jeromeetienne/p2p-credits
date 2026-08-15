@@ -10,8 +10,8 @@ import type { Account, AccountId } from '../types/account_types.js';
 import type { Device, DeviceId } from '../types/device_types.js';
 import type { RandomNumberFn } from '../types/random_types.js';
 import type { Task, TaskAssignment, TaskResult, TaskTypeName, ValidationStatus } from '../types/task_types.js';
-import { DisagreementResolver } from '../validation/disagreement_resolver.js';
-import { ResultComparator } from '../validation/result_comparator.js';
+import { DisagreementResolver, type MajorityOutcome } from '../validation/disagreement_resolver.js';
+import { ResultComparator, type ComparisonStrategy } from '../validation/result_comparator.js';
 import { ValidationSampler } from '../validation/validation_sampler.js';
 import { MetricsCollector } from './metrics_collector.js';
 import { RandomGenerator } from './random_generator.js';
@@ -29,6 +29,14 @@ import { WorkerBehavior, type WorkerProfile } from './worker_behavior.js';
 //	SimulationEngine — runs the network over virtual time and measures what happens
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+
+/** One result returned during a run, and whether the worker really did the work it was paid for. */
+type SimulatedResult = {
+	/** The result the network sees. */
+	taskResult: TaskResult;
+	/** True when the worker performed the computation. Only the simulation ever knows this. */
+	isGenuine: boolean;
+};
 
 /**
  * One run of the simulated network.
@@ -94,6 +102,9 @@ export class SimulationEngine {
 	/** The choice of the tasks that are duplicated. */
 	private _validationSampler: ValidationSampler;
 
+	/** The comparison that says whether two results say the same thing. */
+	private _resultComparator: ResultComparator;
+
 	/** The assignment of tasks to devices. */
 	private _taskScheduler: TaskScheduler;
 
@@ -152,6 +163,15 @@ export class SimulationEngine {
 			randomNumberFn: this._randomNumberFn,
 		});
 
+		const strategyByTaskTypeName = new Map<TaskTypeName, ComparisonStrategy>();
+		for (const taskTypeStrategy of simulationParameters.taskTypeComparisonStrategies) {
+			strategyByTaskTypeName.set(taskTypeStrategy.taskTypeName, taskTypeStrategy.comparisonStrategy);
+		}
+		this._resultComparator = new ResultComparator({
+			defaultStrategy: simulationParameters.defaultComparisonStrategy,
+			strategyByTaskTypeName: strategyByTaskTypeName,
+		});
+
 		const isDeviceEligibleFn = (device: Device): boolean => {
 			return this._suspensionBook.isSuspended(device.accountId, this._simulationClock.currentTick()) === false;
 		};
@@ -164,6 +184,10 @@ export class SimulationEngine {
 			devices: this._devices,
 			randomNumberFn: this._randomNumberFn,
 			isDeviceEligibleFn: isDeviceEligibleFn,
+			workerTrustFn: (accountId, deviceId) => {
+				return this._trustScoreBook.trustOf(accountId, deviceId);
+			},
+			trustedArbiterShare: simulationParameters.trustedArbiterShare,
 		});
 		this._taskTypeNames = simulationParameters.taskCosts.map((trueTaskCost) => {
 			return trueTaskCost.taskTypeName;
@@ -449,71 +473,126 @@ export class SimulationEngine {
 		});
 		this._metricsCollector.recordTaskSubmitted();
 
-		const correctResultValue = `correct-value-of-${task.taskId}`;
-		const primaryResult = this._executeAssignment(task, primaryAssignment, correctResultValue);
+		const trueVector = this._trueVectorOf(task);
+		const primaryResult = this._executeAssignment(task, primaryAssignment, trueVector);
 
 		const workerTrust = this._trustScoreBook.trustOf(primaryAssignment.accountId, primaryAssignment.deviceId);
 		const hasRecentError = this._hasRecentError(primaryAssignment.accountId, tick);
 		if (this._validationSampler.mustValidate(workerTrust, hasRecentError) === false) {
-			this._payWorker(task, primaryResult, price, 'unverified', correctResultValue);
+			this._payWorker(task, primaryResult, price, 'unverified');
 			return;
 		}
 
-		const validatorAssignment = this._validatorSelector.chooseValidator(task, [primaryResult.accountId]);
+		const validatorAssignment = this._validatorSelector.chooseValidator(
+			task,
+			[primaryResult.taskResult.accountId],
+		);
 		if (validatorAssignment === undefined) {
-			this._payWorker(task, primaryResult, price, 'unverified', correctResultValue);
+			this._payWorker(task, primaryResult, price, 'unverified');
 			return;
 		}
 
-		const validatorResult = this._executeAssignment(task, validatorAssignment, correctResultValue);
-		const comparisonOutcome = ResultComparator.compare(primaryResult.resultValue, validatorResult.resultValue);
+		const validatorResult = this._executeAssignment(task, validatorAssignment, trueVector);
+		const comparisonOutcome = this._resultComparator.compare(
+			task.taskTypeName,
+			primaryResult.taskResult.resultValue,
+			validatorResult.taskResult.resultValue,
+		);
+		this._metricsCollector.recordComparison(
+			task.taskTypeName,
+			this._resultComparator.strategyFor(task.taskTypeName).strategyName,
+			comparisonOutcome === 'agreement',
+		);
 		if (comparisonOutcome === 'agreement') {
-			this._acceptResult(task, primaryResult, price, correctResultValue);
-			this._acceptResult(task, validatorResult, price, correctResultValue);
+			this._acceptResult(task, primaryResult, price);
+			this._acceptResult(task, validatorResult, price);
 			return;
 		}
 
-		this._resolveDisagreement(task, [primaryResult, validatorResult], price, correctResultValue);
+		this._resolveDisagreement(task, [primaryResult, validatorResult], price, trueVector);
+	}
+
+	/**
+	 * Returns the vector a perfect execution of one task would produce.
+	 *
+	 * The vector is read from the identifier of the task, so that every worker given that task works on the same
+	 * numbers, and so that a run stays reproducible.
+	 *
+	 * @param task The task to compute the true vector of.
+	 * @returns The vector a perfect execution returns.
+	 */
+	private _trueVectorOf(task: Task): number[] {
+		const taskNumber = Number(task.taskId.replace('task-', ''));
+		const trueVector: number[] = [];
+		for (let index = 0; index < this._parameters.resultVectorLength; index += 1) {
+			trueVector.push(1 + ((taskNumber * 7 + index * 13) % 100) / 10);
+		}
+		return trueVector;
 	}
 
 	/**
 	 * Asks a third worker and pays the majority, because two workers that disagree do not say who is wrong.
 	 *
 	 * @param task The task the workers disagree about.
-	 * @param taskResults The results returned so far for this task.
+	 * @param simulatedResults The results returned so far for this task.
 	 * @param price The price of the task, in credits.
-	 * @param correctResultValue The value a correct execution of the task returns, known only to the simulation.
+	 * @param trueVector The vector a perfect execution of the task returns, known only to the simulation.
 	 * @returns Nothing.
 	 */
 	private _resolveDisagreement(
 		task: Task,
-		taskResults: TaskResult[],
+		simulatedResults: SimulatedResult[],
 		price: number,
-		correctResultValue: string,
+		trueVector: number[],
 	): void {
-		const excludedAccountIds = taskResults.map((taskResult) => {
-			return taskResult.accountId;
+		const excludedAccountIds = simulatedResults.map((simulatedResult) => {
+			return simulatedResult.taskResult.accountId;
 		});
-		const thirdAssignment = this._validatorSelector.chooseValidator(task, excludedAccountIds);
+		const arbiterAssignment = this._validatorSelector.chooseArbiter(task, excludedAccountIds);
 
-		const allResults = [...taskResults];
-		if (thirdAssignment !== undefined) {
-			allResults.push(this._executeAssignment(task, thirdAssignment, correctResultValue));
+		const allResults = [...simulatedResults];
+		if (arbiterAssignment !== undefined) {
+			allResults.push(this._executeAssignment(task, arbiterAssignment, trueVector));
 		}
 
-		const majorityOutcome = DisagreementResolver.resolveByMajority(allResults);
+		const majorityOutcome = this._resolve(task, allResults);
 		if (majorityOutcome.majorityResultValue === undefined) {
 			this._metricsCollector.recordUnresolvedTask();
 			return;
 		}
 
-		for (const taskResult of allResults) {
-			if (majorityOutcome.agreeingAccountIds.includes(taskResult.accountId) === true) {
-				this._acceptResult(task, taskResult, price, correctResultValue);
+		for (const simulatedResult of allResults) {
+			if (majorityOutcome.agreeingAccountIds.includes(simulatedResult.taskResult.accountId) === true) {
+				this._acceptResult(task, simulatedResult, price);
 			} else {
-				this._rejectResult(taskResult, correctResultValue);
+				this._rejectResult(task, simulatedResult);
 			}
 		}
+	}
+
+	/**
+	 * Settles a disagreement with the method the run was given.
+	 *
+	 * @param task The task the workers disagree about.
+	 * @param simulatedResults Every result returned for the task.
+	 * @returns The value that won, the accounts that agree with it, and the accounts that do not.
+	 */
+	private _resolve(task: Task, simulatedResults: SimulatedResult[]): MajorityOutcome {
+		const taskResults = simulatedResults.map((simulatedResult) => {
+			return simulatedResult.taskResult;
+		});
+		if (this._parameters.resolutionMethodName === 'trust weighted') {
+			return DisagreementResolver.resolveByTrustWeight(
+				taskResults,
+				this._resultComparator,
+				task.taskTypeName,
+				(accountId, deviceId) => {
+					return this._trustScoreBook.trustOf(accountId, deviceId);
+				},
+				this._parameters.minimumVoteWeight,
+			);
+		}
+		return DisagreementResolver.resolveByMajority(taskResults, this._resultComparator, task.taskTypeName);
 	}
 
 	/**
@@ -521,36 +600,37 @@ export class SimulationEngine {
 	 *
 	 * @param task The task to execute.
 	 * @param taskAssignment The assignment of the task to a device.
-	 * @param correctResultValue The value a correct execution of the task returns, known only to the simulation.
-	 * @returns The result returned by the worker.
+	 * @param trueVector The vector a perfect execution of the task returns, known only to the simulation.
+	 * @returns The result returned by the worker, and whether the work was really performed.
 	 * @throws When the assigned account has no simulated worker.
 	 */
 	private _executeAssignment(
 		task: Task,
 		taskAssignment: TaskAssignment,
-		correctResultValue: string,
-	): TaskResult {
+		trueVector: number[],
+	): SimulatedResult {
 		const workerProfile = this._workerProfileByAccountId.get(taskAssignment.accountId);
 		if (workerProfile === undefined) {
 			throw new Error(`the account "${taskAssignment.accountId}" has no simulated worker`);
 		}
-		const resultValue = WorkerBehavior.produceResultValue(
+		const producedResult = WorkerBehavior.produceResult(
 			workerProfile,
-			correctResultValue,
+			trueVector,
+			this._parameters.honestNoiseRatio,
 			this._randomNumberFn,
 		);
 		const taskResult: TaskResult = {
 			taskId: task.taskId,
 			accountId: taskAssignment.accountId,
 			deviceId: taskAssignment.deviceId,
-			resultValue: resultValue,
+			resultValue: producedResult.resultValue,
 			completedAtTick: this._simulationClock.currentTick(),
 		};
-		this._metricsCollector.recordExecution(
-			taskAssignment.isValidationCopy,
-			resultValue === correctResultValue,
-		);
-		return taskResult;
+		this._metricsCollector.recordExecution(taskAssignment.isValidationCopy, producedResult.isGenuine);
+		return {
+			taskResult: taskResult,
+			isGenuine: producedResult.isGenuine,
+		};
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
@@ -563,27 +643,28 @@ export class SimulationEngine {
 	 * Confirms one result: the worker gains trust and is paid.
 	 *
 	 * @param task The executed task.
-	 * @param taskResult The confirmed result.
+	 * @param simulatedResult The confirmed result.
 	 * @param price The price of the task, in credits.
-	 * @param correctResultValue The value a correct execution of the task returns, known only to the simulation.
 	 * @returns Nothing.
 	 */
-	private _acceptResult(task: Task, taskResult: TaskResult, price: number, correctResultValue: string): void {
+	private _acceptResult(task: Task, simulatedResult: SimulatedResult, price: number): void {
+		const taskResult = simulatedResult.taskResult;
 		const trustChange = this._trustScoreBook.afterConfirmedResult(taskResult.accountId, taskResult.deviceId);
 		if (trustChange.newCombinedTrust >= this._parameters.trustedThreshold) {
 			this._metricsCollector.recordTrustedAtTick(taskResult.accountId, this._simulationClock.currentTick());
 		}
-		this._payWorker(task, taskResult, price, 'accepted', correctResultValue);
+		this._payWorker(task, simulatedResult, price, 'accepted');
 	}
 
 	/**
 	 * Contradicts one result: the worker loses trust and is paid nothing.
 	 *
-	 * @param taskResult The contradicted result.
-	 * @param correctResultValue The value a correct execution of the task returns, known only to the simulation.
+	 * @param task The executed task.
+	 * @param simulatedResult The contradicted result.
 	 * @returns Nothing.
 	 */
-	private _rejectResult(taskResult: TaskResult, correctResultValue: string): void {
+	private _rejectResult(task: Task, simulatedResult: SimulatedResult): void {
+		const taskResult = simulatedResult.taskResult;
 		const tick = this._simulationClock.currentTick();
 		const trustChange = this._trustScoreBook.afterInvalidResult(
 			taskResult.accountId,
@@ -596,7 +677,7 @@ export class SimulationEngine {
 		if (trustChange.confiscatesUnverifiedCredits === true) {
 			this._confiscateUnverifiedCredits(taskResult);
 		}
-		this._metricsCollector.recordRejectedResult(taskResult.resultValue === correctResultValue);
+		this._metricsCollector.recordRejectedResult(simulatedResult.isGenuine, task.taskTypeName);
 	}
 
 	/**
@@ -643,23 +724,21 @@ export class SimulationEngine {
 	 * Records the payment of one worker in the ledger.
 	 *
 	 * @param task The executed task.
-	 * @param taskResult The paid result.
+	 * @param simulatedResult The paid result.
 	 * @param price The price of the task, in credits.
 	 * @param validationStatus The validation status of the paid result.
-	 * @param correctResultValue The value a correct execution of the task returns, known only to the simulation.
 	 * @returns Nothing.
 	 * @throws When the type of the task has no true price.
 	 */
 	private _payWorker(
 		task: Task,
-		taskResult: TaskResult,
+		simulatedResult: SimulatedResult,
 		price: number,
 		validationStatus: ValidationStatus,
-		correctResultValue: string,
 	): void {
 		this._ledger.append({
 			tick: this._simulationClock.currentTick(),
-			accountId: taskResult.accountId,
+			accountId: simulatedResult.taskResult.accountId,
 			taskId: task.taskId,
 			entryType: 'credit',
 			amount: price,
@@ -670,10 +749,6 @@ export class SimulationEngine {
 		if (truePrice === undefined) {
 			throw new Error(`the task type "${task.taskTypeName}" has no true price`);
 		}
-		this._metricsCollector.recordPaidResult(
-			taskResult.resultValue === correctResultValue,
-			price,
-			truePrice,
-		);
+		this._metricsCollector.recordPaidResult(simulatedResult.isGenuine, price, truePrice);
 	}
 }

@@ -40,6 +40,7 @@ export {
 } from './types/ledger_types.js';
 
 export type { RandomNumberFn } from './types/random_types.js';
+export type { WorkerTrustFn } from './types/trust_types.js';
 
 export { Ledger } from './ledger/ledger.js';
 
@@ -56,12 +57,21 @@ export { TrustPolicy, PenaltyPolicyNameSchema } from './trust/trust_policy.js';
 export type { PenaltyPolicyName, TrustOutcome, TrustPolicyOptions } from './trust/trust_policy.js';
 export { SuspensionBook } from './trust/suspension_book.js';
 
-export { ResultComparator } from './validation/result_comparator.js';
-export type { ComparisonOutcome } from './validation/result_comparator.js';
+export {
+	ComparisonStrategyNameSchema,
+	ComparisonStrategySchema,
+	ResultComparator,
+} from './validation/result_comparator.js';
+export type {
+	ComparisonOutcome,
+	ComparisonStrategy,
+	ComparisonStrategyName,
+	ResultComparatorOptions,
+} from './validation/result_comparator.js';
 export { ValidationSampler } from './validation/validation_sampler.js';
 export type { ValidationSamplerOptions } from './validation/validation_sampler.js';
-export { DisagreementResolver } from './validation/disagreement_resolver.js';
-export type { MajorityOutcome } from './validation/disagreement_resolver.js';
+export { DisagreementResolver, ResolutionMethodNameSchema } from './validation/disagreement_resolver.js';
+export type { MajorityOutcome, ResolutionMethodName } from './validation/disagreement_resolver.js';
 
 export { TaskScheduler } from './scheduler/task_scheduler.js';
 export type { TaskSchedulerOptions } from './scheduler/task_scheduler.js';
@@ -76,9 +86,11 @@ export type {
 	DeviceSummary,
 	SimulationParameters,
 	SimulationReport,
+	TaskTypeComparisonStrategy,
 	TaskTypePricingSummary,
+	TaskTypeValidationSummary,
 	TrueTaskCost,
 	WorkerSummary,
 } from './simulation/simulation_types.js';
 export { WorkerBehavior, WorkerBehaviorNameSchema, WorkerProfileSchema } from './simulation/worker_behavior.js';
-export type { WorkerBehaviorName, WorkerProfile } from './simulation/worker_behavior.js';
+export type { ProducedResult, WorkerBehaviorName, WorkerProfile } from './simulation/worker_behavior.js';

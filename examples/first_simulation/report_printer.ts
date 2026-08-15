@@ -115,6 +115,8 @@ export class ReportPrinter {
 		}
 		console.log('');
 
+		ReportPrinter.printValidity(simulationReport, 'validity');
+
 		console.log('--- workers ---');
 		console.log(
 			ReportPrinter._formatWorkerRow([
@@ -169,6 +171,42 @@ export class ReportPrinter {
 				]),
 			);
 		}
+		console.log('');
+	}
+
+	/**
+	 * Writes how the comparison of each task type behaved, under the given heading.
+	 *
+	 * @param simulationReport The report of the run.
+	 * @param headingName The heading written above the table.
+	 * @returns Nothing.
+	 */
+	static printValidity(simulationReport: SimulationReport, headingName: string): void {
+		console.log(`--- ${headingName} ---`);
+		console.log(
+			ReportPrinter._formatValidationRow([
+				'task type',
+				'comparison',
+				'comparisons',
+				'disagreements',
+				'genuine rejected',
+			]),
+		);
+		for (const taskTypeValidationSummary of simulationReport.taskTypeValidationSummaries) {
+			console.log(
+				ReportPrinter._formatValidationRow([
+					taskTypeValidationSummary.taskTypeName,
+					taskTypeValidationSummary.comparisonStrategyName,
+					String(taskTypeValidationSummary.comparisonCount),
+					String(taskTypeValidationSummary.disagreementCount),
+					String(taskTypeValidationSummary.genuineResultRejectedCount),
+				]),
+			);
+		}
+		console.log(`correct results rejected in total  ${simulationReport.correctResultRejectedCount}`);
+		console.log(`tasks left with no majority       ${simulationReport.unresolvedTaskCount}`);
+		const creditsCreated = ReportPrinter._formatCredits(simulationReport.totalCreditsCreated);
+		console.log(`credits created                   ${creditsCreated}`);
 		console.log('');
 	}
 
@@ -272,6 +310,16 @@ export class ReportPrinter {
 		}
 
 		return deviceGroupSummaries;
+	}
+
+	/**
+	 * Writes one line of the table of comparisons, so that the heading and the lines below it always line up.
+	 *
+	 * @param cells The five cells of the line, from the name of the task type to the genuine results rejected.
+	 * @returns The written line.
+	 */
+	private static _formatValidationRow(cells: string[]): string {
+		return ReportPrinter._formatRow(cells, [17, 22, 13, 15, 18]);
 	}
 
 	/**

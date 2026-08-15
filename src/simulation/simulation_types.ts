@@ -3,6 +3,8 @@ import type { BenchmarkEnvironment } from '../types/benchmark_types.js';
 import type { DeviceId } from '../types/device_types.js';
 import type { PenaltyPolicyName } from '../trust/trust_policy.js';
 import type { TaskTypeName } from '../types/task_types.js';
+import type { ResolutionMethodName } from '../validation/disagreement_resolver.js';
+import type { ComparisonStrategy, ComparisonStrategyName } from '../validation/result_comparator.js';
 import type { WorkerBehaviorName } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -22,6 +24,14 @@ export type TrueTaskCost = {
 	taskTypeName: TaskTypeName;
 	/** Cost the task type truly takes on the reference machine, in seconds. */
 	trueCostSeconds: number;
+};
+
+/** The comparison one task type uses, instead of the default one. */
+export type TaskTypeComparisonStrategy = {
+	/** Name of the task type. */
+	taskTypeName: TaskTypeName;
+	/** The comparison used for the results of that task type. */
+	comparisonStrategy: ComparisonStrategy;
 };
 
 /**
@@ -47,6 +57,23 @@ export type SimulationParameters = {
 	untrustedThreshold: number;
 	/** Number of ticks an invalid result stays recent for, and keeps the worker under close verification. */
 	recentErrorTickCount: number;
+	/** The comparison used by every task type that has no comparison of its own. */
+	defaultComparisonStrategy: ComparisonStrategy;
+	/** The comparison of each task type that needs one of its own. */
+	taskTypeComparisonStrategies: TaskTypeComparisonStrategy[];
+	/** The way a disagreement between workers is settled. */
+	resolutionMethodName: ResolutionMethodName;
+	/** The weight of a vote carried by a worker with no trust at all, used by the `trust weighted` method. */
+	minimumVoteWeight: number;
+	/** Share of the candidates, ordered from the most trusted, the worker settling a disagreement is drawn from. */
+	trustedArbiterShare: number;
+	/** Number of numbers a result is made of. */
+	resultVectorLength: number;
+	/**
+	 * Largest share by which one number of a genuine result may miss the true number. This is the non-determinism of
+	 * section 12.1 of the design note: two correct executions of the same task do not return the same value.
+	 */
+	honestNoiseRatio: number;
 	/** Number of honest workers. */
 	honestWorkerCount: number;
 	/** Number of unstable workers. */
@@ -143,6 +170,23 @@ export type TaskTypePricingSummary = {
 	profitabilityRatio: number;
 };
 
+/** How the comparison of one task type behaved during the run. */
+export type TaskTypeValidationSummary = {
+	/** Name of the task type. */
+	taskTypeName: TaskTypeName;
+	/** The comparison used for the results of that task type. */
+	comparisonStrategyName: ComparisonStrategyName;
+	/** Number of times two results of that task type were compared. */
+	comparisonCount: number;
+	/** Number of those comparisons that ended in a disagreement. */
+	disagreementCount: number;
+	/**
+	 * Number of results of that task type that were genuinely computed and rejected anyway. This is the price an
+	 * honest worker pays for a comparison that is stricter than the machine it runs on.
+	 */
+	genuineResultRejectedCount: number;
+};
+
 /** What one device earned in trust, and when it joined the network. */
 export type DeviceSummary = {
 	/** Identifier of the device. */
@@ -217,4 +261,6 @@ export type SimulationReport = {
 	workerSummaries: WorkerSummary[];
 	/** What each device earned in trust, and when it joined the network. */
 	deviceSummaries: DeviceSummary[];
+	/** How the comparison of each task type behaved. */
+	taskTypeValidationSummaries: TaskTypeValidationSummary[];
 };

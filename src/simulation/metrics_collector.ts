@@ -2,7 +2,15 @@ import type { Ledger } from '../ledger/ledger.js';
 import type { SuspensionBook } from '../trust/suspension_book.js';
 import type { TrustScoreBook } from '../trust/trust_score.js';
 import type { AccountId } from '../types/account_types.js';
-import type { DeviceSummary, SimulationReport, TaskTypePricingSummary, WorkerSummary } from './simulation_types.js';
+import type { TaskTypeName } from '../types/task_types.js';
+import type { ComparisonStrategyName } from '../validation/result_comparator.js';
+import type {
+	DeviceSummary,
+	SimulationReport,
+	TaskTypePricingSummary,
+	TaskTypeValidationSummary,
+	WorkerSummary,
+} from './simulation_types.js';
 import type { WorkerProfile } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -58,6 +66,9 @@ export class MetricsCollector {
 	/** Tick at which each account first reached the trusted threshold. */
 	private _firstTrustedTickByAccountId = new Map<AccountId, number>();
 
+	/** How the comparison of each task type behaved, indexed by the name of the task type. */
+	private _validationCountersByTaskTypeName = new Map<TaskTypeName, TaskTypeValidationSummary>();
+
 	/**
 	 * Records that one task was submitted to the network.
 	 *
@@ -103,14 +114,38 @@ export class MetricsCollector {
 	/**
 	 * Records that the network rejected a result and paid nothing for it.
 	 *
-	 * @param isResultCorrect True when the rejected value was the correct value of the task.
+	 * @param isResultCorrect True when the rejected result was genuinely computed by its worker.
+	 * @param taskTypeName Name of the type of the rejected task.
 	 * @returns Nothing.
 	 */
-	recordRejectedResult(isResultCorrect: boolean): void {
+	recordRejectedResult(isResultCorrect: boolean, taskTypeName: TaskTypeName): void {
 		if (isResultCorrect === false) {
 			this._wrongResultDetectedCount += 1;
-		} else {
-			this._correctResultRejectedCount += 1;
+			return;
+		}
+		this._correctResultRejectedCount += 1;
+		const counters = this._validationCountersOf(taskTypeName);
+		counters.genuineResultRejectedCount += 1;
+	}
+
+	/**
+	 * Records that two results of one task type were compared.
+	 *
+	 * @param taskTypeName Name of the type of the compared task.
+	 * @param comparisonStrategyName The comparison used for that task type.
+	 * @param isAgreement True when the two results said the same thing.
+	 * @returns Nothing.
+	 */
+	recordComparison(
+		taskTypeName: TaskTypeName,
+		comparisonStrategyName: ComparisonStrategyName,
+		isAgreement: boolean,
+	): void {
+		const counters = this._validationCountersOf(taskTypeName);
+		counters.comparisonStrategyName = comparisonStrategyName;
+		counters.comparisonCount += 1;
+		if (isAgreement === false) {
+			counters.disagreementCount += 1;
 		}
 	}
 
@@ -218,7 +253,30 @@ export class MetricsCollector {
 			taskTypePricingSummaries: taskTypePricingSummaries,
 			workerSummaries: workerSummaries,
 			deviceSummaries: deviceSummaries,
+			taskTypeValidationSummaries: Array.from(this._validationCountersByTaskTypeName.values()),
 		};
+	}
+
+	/**
+	 * Returns the counters of one task type, and opens them the first time that task type is seen.
+	 *
+	 * @param taskTypeName Name of the task type.
+	 * @returns The counters of that task type.
+	 */
+	private _validationCountersOf(taskTypeName: TaskTypeName): TaskTypeValidationSummary {
+		const existingCounters = this._validationCountersByTaskTypeName.get(taskTypeName);
+		if (existingCounters !== undefined) {
+			return existingCounters;
+		}
+		const openedCounters: TaskTypeValidationSummary = {
+			taskTypeName: taskTypeName,
+			comparisonStrategyName: 'exact',
+			comparisonCount: 0,
+			disagreementCount: 0,
+			genuineResultRejectedCount: 0,
+		};
+		this._validationCountersByTaskTypeName.set(taskTypeName, openedCounters);
+		return openedCounters;
 	}
 
 	/**

@@ -10,6 +10,7 @@ The shapes shared by every module of the library: the account, the device, the t
 - `benchmark_types.ts`: the environment a price is measured in, and one measured run.
 - `ledger_types.ts`: the movements of credits recorded by the ledger.
 - `random_types.ts`: `RandomNumberFn`, the source of randomness every policy receives.
+- `trust_types.ts`: `WorkerTrustFn`, how a module reads a trust score without importing the trust module.
 
 ## Rules
 - This folder holds no logic. A file here declares a Zod schema and the type inferred from it, and nothing else.

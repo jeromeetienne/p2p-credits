@@ -20,11 +20,11 @@ export const WorkerBehaviorNameSchema = Zod.enum([
 /**
  * The name of a worker behaviour.
  *
- * - `honest`: almost always returns a correct result.
- * - `unstable`: sometimes returns a wrong result, because of the hardware, the runtime, a crash, or a numerical
- *   problem. The worker does not try to cheat.
- * - `malicious`: never performs the computation and always returns a fabricated value, to be paid for work it did not
- *   do.
+ * - `honest`: performs the computation and returns what it found.
+ * - `unstable`: performs the computation, and sometimes returns a badly wrong value because of the hardware, the
+ *   runtime, a crash, or a numerical problem. The worker does not try to cheat.
+ * - `malicious`: never performs the computation and returns a value of the right shape and of the wrong content, to
+ *   be paid for work it did not do.
  */
 export type WorkerBehaviorName = Zod.infer<typeof WorkerBehaviorNameSchema>;
 
@@ -37,8 +37,8 @@ export const WorkerProfileSchema = Zod.object({
 	/** The behaviour of the worker. */
 	behaviorName: WorkerBehaviorNameSchema,
 	/**
-	 * Likelihood that the worker returns a wrong value without trying to cheat, between 0 and 1. The value is ignored
-	 * for a malicious worker, which always returns a fabricated value.
+	 * Likelihood that the worker returns a badly wrong value without trying to cheat, between 0 and 1. The value is
+	 * ignored for a malicious worker, which never performs the computation at all.
 	 */
 	errorProbability: Zod.number().min(0).max(1),
 });
@@ -46,44 +46,79 @@ export const WorkerProfileSchema = Zod.object({
 /** One simulated worker: an account, a device, and the way the worker produces the value it returns. */
 export type WorkerProfile = Zod.infer<typeof WorkerProfileSchema>;
 
+/** What one worker returned, and whether it did the work it was paid for. */
+export type ProducedResult = {
+	/** The value the worker returned, written as numbers separated by commas. */
+	resultValue: string;
+	/**
+	 * True when the worker performed the computation and returned what it found. A genuine result can still differ
+	 * from the result of another genuine worker, because two correct executions are not identical.
+	 */
+	isGenuine: boolean;
+};
+
 /**
  * The value returned by a simulated worker.
  *
- * The simulation never executes an inference. Each task has one correct value, and the behaviour of the worker decides
- * whether that value, or another one, is returned.
+ * The simulation never executes an inference. Each task has one true vector of numbers, and the behaviour of the
+ * worker decides what comes back: that vector carrying the small differences of a real execution, that vector badly
+ * damaged, or a vector of the right shape that was never computed at all.
  */
 export class WorkerBehavior {
 	/**
 	 * Produces the value one worker returns for one task.
 	 *
 	 * @param workerProfile The worker that executes the task.
-	 * @param correctResultValue The value a correct execution of the task returns.
+	 * @param trueVector The vector a perfect execution of the task returns.
+	 * @param noiseRatio Largest share by which one number of a genuine result may miss the true number.
 	 * @param randomNumberFn The source of randomness.
-	 * @returns The value the worker returns, which is the correct value or a wrong one.
+	 * @returns The value the worker returns, and whether the work was really performed.
 	 */
-	static produceResultValue(
+	static produceResult(
 		workerProfile: WorkerProfile,
-		correctResultValue: string,
+		trueVector: number[],
+		noiseRatio: number,
 		randomNumberFn: RandomNumberFn,
-	): string {
+	): ProducedResult {
 		if (workerProfile.behaviorName === 'malicious') {
-			return WorkerBehavior._buildWrongValue('fabricated', randomNumberFn);
+			const fabricatedVector = trueVector.map((trueNumber) => {
+				return trueNumber * (0.5 + randomNumberFn());
+			});
+			return {
+				resultValue: WorkerBehavior._writeVector(fabricatedVector),
+				isGenuine: false,
+			};
 		}
+
 		if (randomNumberFn() < workerProfile.errorProbability) {
-			return WorkerBehavior._buildWrongValue('corrupted', randomNumberFn);
+			const damagedVector = trueVector.map((trueNumber) => {
+				return trueNumber * (1 + randomNumberFn());
+			});
+			return {
+				resultValue: WorkerBehavior._writeVector(damagedVector),
+				isGenuine: false,
+			};
 		}
-		return correctResultValue;
+
+		const executedVector = trueVector.map((trueNumber) => {
+			const noise = (randomNumberFn() * 2 - 1) * noiseRatio;
+			return trueNumber * (1 + noise);
+		});
+		return {
+			resultValue: WorkerBehavior._writeVector(executedVector),
+			isGenuine: true,
+		};
 	}
 
 	/**
-	 * Builds a wrong value that no other worker can return by chance.
+	 * Writes a vector of numbers as the text a worker returns.
 	 *
-	 * @param prefix Word saying why the value is wrong, either `fabricated` or `corrupted`.
-	 * @param randomNumberFn The source of randomness.
-	 * @returns A wrong value.
+	 * @param vector The numbers to write.
+	 * @returns The numbers written one after the other and separated by commas.
 	 */
-	private static _buildWrongValue(prefix: string, randomNumberFn: RandomNumberFn): string {
-		const drawnNumber = Math.floor(randomNumberFn() * 1000000000);
-		return `${prefix}-value-${drawnNumber}`;
+	private static _writeVector(vector: number[]): string {
+		return vector.map((numberOfVector) => {
+			return numberOfVector.toFixed(6);
+		}).join(',');
 	}
 }
