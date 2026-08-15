@@ -1,0 +1,31 @@
+{
+	"name": "p2p-credits",
+	"version": "0.1.0",
+	"description": "Credit accounting library for a peer-to-peer inference network",
+	"license": "MIT",
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"build": "tsc --project tsconfig.build.json",
+		"example:first_simulation": "tsx examples/first_simulation/main.ts"
+	},
+	"dependencies": {
+		"zod": "^4.4.3"
+	},
+	"devDependencies": {
+		"@types/node": "^26.2.0",
+		"tsx": "^4.23.12",
+		"typescript": "^7.0.2"
+	}
+}
