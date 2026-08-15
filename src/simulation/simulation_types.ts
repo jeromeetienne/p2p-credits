@@ -1,5 +1,7 @@
 import type { AccountId } from '../types/account_types.js';
 import type { BenchmarkEnvironment } from '../types/benchmark_types.js';
+import type { DeviceId } from '../types/device_types.js';
+import type { PenaltyPolicyName } from '../trust/trust_policy.js';
 import type { TaskTypeName } from '../types/task_types.js';
 import type { WorkerBehaviorName } from './worker_behavior.js';
 
@@ -35,8 +37,16 @@ export type SimulationParameters = {
 	tickCount: number;
 	/** Number of tasks submitted at every tick. */
 	tasksPerTick: number;
-	/** Share of the tasks that are duplicated to be validated, between 0 and 1. */
-	validationRate: number;
+	/** Share of the tasks duplicated for a worker at or below the untrusted threshold, between 0 and 1. */
+	untrustedValidationRate: number;
+	/** Share of the tasks duplicated for a worker at or above the trusted threshold, between 0 and 1. */
+	trustedValidationRate: number;
+	/** Share of the tasks duplicated for a worker that returned an invalid result recently, between 0 and 1. */
+	recentErrorValidationRate: number;
+	/** Trust score at or below which a worker is treated as new and is verified often. */
+	untrustedThreshold: number;
+	/** Number of ticks an invalid result stays recent for, and keeps the worker under close verification. */
+	recentErrorTickCount: number;
 	/** Number of honest workers. */
 	honestWorkerCount: number;
 	/** Number of unstable workers. */
@@ -67,6 +77,23 @@ export type SimulationParameters = {
 	trustIncreaseOnConfirmedResult: number;
 	/** Amount removed from the trust score when a result is contradicted by other workers. */
 	trustDecreaseOnInvalidResult: number;
+	/** Number the ordinary reduction is multiplied by under the `strong reduction` penalty. */
+	strongPenaltyFactor: number;
+	/** The penalty applied to a worker whose result was contradicted. */
+	penaltyPolicyName: PenaltyPolicyName;
+	/** Number of ticks a worker receives no task for under the `suspension` penalty. */
+	suspensionTickCount: number;
+	/**
+	 * Share of the combined trust that comes from the device, between 0 and 1. A value of 0 gives a new device the
+	 * whole trust of its account, and a value of 1 makes a new device earn its trust alone.
+	 */
+	deviceTrustWeight: number;
+	/**
+	 * Tick at which every worker adds a second, unknown device to its account, or `undefined` when no worker ever
+	 * does. This is the moment the question of section 12.3 of the design note becomes measurable: a trusted account
+	 * meets a device that earned nothing, and a caught account meets one too.
+	 */
+	secondDeviceTick: number | undefined;
 	/** Lowest value a trust score can reach. */
 	minimumTrust: number;
 	/** Highest value a trust score can reach. */
@@ -83,8 +110,12 @@ export type WorkerSummary = {
 	behaviorName: WorkerBehaviorName;
 	/** Balance of the account at the end of the run, in credits. */
 	balance: number;
-	/** Trust score of the account at the end of the run. */
+	/** Combined trust of the worker at the end of the run. */
 	trust: number;
+	/** Trust of the account at the end of the run. */
+	accountTrust: number;
+	/** Trust of the device at the end of the run. */
+	deviceTrust: number;
 	/** Number of results of the worker that another worker confirmed. */
 	confirmedResultCount: number;
 	/** Number of results of the worker that other workers contradicted. */
@@ -110,6 +141,24 @@ export type TaskTypePricingSummary = {
 	 * than the work performed, and the task type is then more profitable than the others.
 	 */
 	profitabilityRatio: number;
+};
+
+/** What one device earned in trust, and when it joined the network. */
+export type DeviceSummary = {
+	/** Identifier of the device. */
+	deviceId: DeviceId;
+	/** Identifier of the account that owns the device. */
+	accountId: AccountId;
+	/** The behaviour of the worker that owns the device. */
+	behaviorName: WorkerBehaviorName;
+	/** Trust of the device at the end of the run. */
+	deviceTrust: number;
+	/** Trust of the account that owns the device, at the end of the run. */
+	accountTrust: number;
+	/** The trust the worker is judged with when it uses this device, at the end of the run. */
+	combinedTrust: number;
+	/** Tick at which the device joined the network. */
+	addedAtTick: number;
 };
 
 /**
@@ -141,6 +190,12 @@ export type SimulationReport = {
 	correctResultRejectedCount: number;
 	/** Number of tasks where no value reached a majority, so nobody was paid. */
 	unresolvedTaskCount: number;
+	/** Number of tasks nobody executed, because every device was suspended at that moment. */
+	unassignedTaskCount: number;
+	/** Number of suspensions pronounced during the run. */
+	suspensionCount: number;
+	/** Amount of credits taken back from workers caught returning a wrong result, in credits. */
+	confiscatedCredits: number;
 	/** Total amount of credits created by the network during the run. */
 	totalCreditsCreated: number;
 	/** Total amount of credits consumed by the users of the network during the run. */
@@ -160,4 +215,6 @@ export type SimulationReport = {
 	taskTypePricingSummaries: TaskTypePricingSummary[];
 	/** What each worker earned, and how the network judged it. */
 	workerSummaries: WorkerSummary[];
+	/** What each device earned in trust, and when it joined the network. */
+	deviceSummaries: DeviceSummary[];
 };

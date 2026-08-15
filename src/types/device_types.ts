@@ -31,3 +31,11 @@ export const DeviceSchema = Zod.object({
 
 /** A device that executes tasks on behalf of an account. */
 export type Device = Zod.infer<typeof DeviceSchema>;
+
+/**
+ * A function that says whether a device is allowed to receive a task right now.
+ *
+ * The scheduler asks this question and never answers it, so it stays ignorant of the reason a device is set aside,
+ * whether that reason is a suspension, a maintenance window, or anything added later.
+ */
+export type DeviceEligibilityFn = (device: Device) => boolean;

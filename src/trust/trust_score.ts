@@ -1,40 +1,61 @@
 import type { AccountId } from '../types/account_types.js';
+import type { DeviceId } from '../types/device_types.js';
+import type { TrustPolicy } from './trust_policy.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
-//	TrustScoreBook — the estimated likelihood that a worker returns a correct result
+//	TrustScoreBook — the trust of every account and of every device, and their combination
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
-/** The values that decide how fast a trust score rises and falls. */
+/** The values the trust score book needs. */
 export type TrustScoreBookOptions = {
-	/** Trust score given to an account the first time it is seen. */
-	initialTrust: number;
-	/** Amount added to the trust score when a result of the account is confirmed by another worker. */
-	increaseOnConfirmedResult: number;
-	/** Amount removed from the trust score when a result of the account is contradicted by other workers. */
-	decreaseOnInvalidResult: number;
-	/** Lowest value a trust score can reach. */
-	minimumTrust: number;
-	/** Highest value a trust score can reach. */
-	maximumTrust: number;
+	/** What happens to a score after a result was confirmed or contradicted. */
+	trustPolicy: TrustPolicy;
+	/**
+	 * Share of the combined trust that comes from the device, between 0 and 1. A value of 0 gives a new device the
+	 * whole trust of its account, and a value of 1 makes a new device earn its trust alone whatever its account did.
+	 */
+	deviceTrustWeight: number;
+};
+
+/** What one judged result changed, for the account, for the device, and for the worker. */
+export type TrustChange = {
+	/** The trust of the account after the result was judged. */
+	newAccountTrust: number;
+	/** The trust of the device after the result was judged. */
+	newDeviceTrust: number;
+	/** The combined trust of the worker after the result was judged. */
+	newCombinedTrust: number;
+	/** Number of ticks the worker receives no task for, which is 0 when the worker is not suspended. */
+	suspensionTickCount: number;
+	/** True when the credits paid for the results nobody verified have to be taken back. */
+	confiscatesUnverifiedCredits: boolean;
 };
 
 /**
- * The trust score of every account.
+ * The trust score of every account and of every device.
  *
  * The trust score is not money and it is never exchanged. It is the estimated likelihood that a result produced by
- * this account is correct, and it stays completely separate from the balance held by the ledger.
+ * this worker is correct, and it stays completely separate from the balance held by the ledger.
  *
- * This first version holds one score per account. Whether trust belongs to the account, to the device, or to both is
- * an open question of the design note, and the answer will be measured before it is chosen.
+ * An account and a device each carry their own score, and the trust of a worker combines the two. A trusted account
+ * that adds an unknown device therefore does not hand the whole of its history to that device, which is the question
+ * left open by section 12.3 of the design note. How much is handed over is the weight given at construction, so the
+ * answer can be measured instead of decided.
  */
 export class TrustScoreBook {
-	/** The values that decide how fast a trust score rises and falls. */
-	private _options: TrustScoreBookOptions;
+	/** What happens to a score after a result was confirmed or contradicted. */
+	private _trustPolicy: TrustPolicy;
+
+	/** Share of the combined trust that comes from the device, between 0 and 1. */
+	private _deviceTrustWeight: number;
 
 	/** The current trust score of every account seen so far. */
 	private _trustByAccountId = new Map<AccountId, number>();
+
+	/** The current trust score of every device seen so far. */
+	private _trustByDeviceId = new Map<DeviceId, number>();
 
 	/** The number of confirmed results of every account seen so far. */
 	private _confirmedResultCountByAccountId = new Map<AccountId, number>();
@@ -42,49 +63,101 @@ export class TrustScoreBook {
 	/** The number of invalid results of every account seen so far. */
 	private _invalidResultCountByAccountId = new Map<AccountId, number>();
 
+	/** The tick of the last invalid result of every account that ever returned one. */
+	private _lastInvalidResultTickByAccountId = new Map<AccountId, number>();
+
 	/**
-	 * @param trustScoreBookOptions The values that decide how fast a trust score rises and falls.
+	 * @param trustScoreBookOptions The policy that moves a score, and the share of the trust that the device carries.
 	 */
 	constructor(trustScoreBookOptions: TrustScoreBookOptions) {
-		this._options = trustScoreBookOptions;
+		this._trustPolicy = trustScoreBookOptions.trustPolicy;
+		this._deviceTrustWeight = trustScoreBookOptions.deviceTrustWeight;
 	}
 
 	/**
 	 * Returns the trust score of an account.
 	 *
 	 * @param accountId Identifier of the account.
-	 * @returns The trust score, between the minimum trust and the maximum trust.
+	 * @returns The trust score of the account.
 	 */
-	trustOf(accountId: AccountId): number {
-		const trust = this._trustByAccountId.get(accountId);
-		if (trust === undefined) {
-			return this._options.initialTrust;
-		}
-		return trust;
+	accountTrustOf(accountId: AccountId): number {
+		return this._trustByAccountId.get(accountId) ?? this._trustPolicy.initialTrust();
 	}
 
 	/**
-	 * Raises the trust score of an account, because another worker returned the same result.
+	 * Returns the trust score of a device.
+	 *
+	 * @param deviceId Identifier of the device.
+	 * @returns The trust score of the device.
+	 */
+	deviceTrustOf(deviceId: DeviceId): number {
+		return this._trustByDeviceId.get(deviceId) ?? this._trustPolicy.initialTrust();
+	}
+
+	/**
+	 * Returns the trust of a worker, which combines the trust of its account and the trust of its device.
 	 *
 	 * @param accountId Identifier of the account.
-	 * @returns The new trust score.
+	 * @param deviceId Identifier of the device.
+	 * @returns The combined trust score.
 	 */
-	afterConfirmedResult(accountId: AccountId): number {
+	trustOf(accountId: AccountId, deviceId: DeviceId): number {
+		const accountTrust = this.accountTrustOf(accountId);
+		const deviceTrust = this.deviceTrustOf(deviceId);
+		return (1 - this._deviceTrustWeight) * accountTrust + this._deviceTrustWeight * deviceTrust;
+	}
+
+	/**
+	 * Raises the trust of an account and of its device, because another worker returned the same result.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @param deviceId Identifier of the device.
+	 * @returns What the confirmed result changed.
+	 */
+	afterConfirmedResult(accountId: AccountId, deviceId: DeviceId): TrustChange {
 		const previousCount = this._confirmedResultCountByAccountId.get(accountId) ?? 0;
 		this._confirmedResultCountByAccountId.set(accountId, previousCount + 1);
-		return this._changeTrust(accountId, this._options.increaseOnConfirmedResult);
+
+		const accountOutcome = this._trustPolicy.afterConfirmedResult(this.accountTrustOf(accountId));
+		const deviceOutcome = this._trustPolicy.afterConfirmedResult(this.deviceTrustOf(deviceId));
+		this._trustByAccountId.set(accountId, accountOutcome.newTrust);
+		this._trustByDeviceId.set(deviceId, deviceOutcome.newTrust);
+
+		return {
+			newAccountTrust: accountOutcome.newTrust,
+			newDeviceTrust: deviceOutcome.newTrust,
+			newCombinedTrust: this.trustOf(accountId, deviceId),
+			suspensionTickCount: 0,
+			confiscatesUnverifiedCredits: false,
+		};
 	}
 
 	/**
-	 * Lowers the trust score of an account, because other workers contradicted its result.
+	 * Lowers the trust of an account and of its device, and applies the penalty policy, because other workers
+	 * contradicted the result.
 	 *
 	 * @param accountId Identifier of the account.
-	 * @returns The new trust score.
+	 * @param deviceId Identifier of the device.
+	 * @param tick The current tick, kept to know how recent the error is.
+	 * @returns What the invalid result changed, and what else the network takes from the worker.
 	 */
-	afterInvalidResult(accountId: AccountId): number {
+	afterInvalidResult(accountId: AccountId, deviceId: DeviceId, tick: number): TrustChange {
 		const previousCount = this._invalidResultCountByAccountId.get(accountId) ?? 0;
 		this._invalidResultCountByAccountId.set(accountId, previousCount + 1);
-		return this._changeTrust(accountId, -this._options.decreaseOnInvalidResult);
+		this._lastInvalidResultTickByAccountId.set(accountId, tick);
+
+		const accountOutcome = this._trustPolicy.afterInvalidResult(this.accountTrustOf(accountId));
+		const deviceOutcome = this._trustPolicy.afterInvalidResult(this.deviceTrustOf(deviceId));
+		this._trustByAccountId.set(accountId, accountOutcome.newTrust);
+		this._trustByDeviceId.set(deviceId, deviceOutcome.newTrust);
+
+		return {
+			newAccountTrust: accountOutcome.newTrust,
+			newDeviceTrust: deviceOutcome.newTrust,
+			newCombinedTrust: this.trustOf(accountId, deviceId),
+			suspensionTickCount: accountOutcome.suspensionTickCount,
+			confiscatesUnverifiedCredits: accountOutcome.confiscatesUnverifiedCredits,
+		};
 	}
 
 	/**
@@ -108,17 +181,12 @@ export class TrustScoreBook {
 	}
 
 	/**
-	 * Adds an amount to the trust score of an account and keeps the result inside the allowed range.
+	 * Returns the tick of the last invalid result of an account.
 	 *
 	 * @param accountId Identifier of the account.
-	 * @param amount Amount to add, which is negative when the trust must fall.
-	 * @returns The new trust score.
+	 * @returns The tick of the last invalid result, or `undefined` when the account never returned one.
 	 */
-	private _changeTrust(accountId: AccountId, amount: number): number {
-		const currentTrust = this.trustOf(accountId);
-		const rawTrust = currentTrust + amount;
-		const boundedTrust = Math.min(this._options.maximumTrust, Math.max(this._options.minimumTrust, rawTrust));
-		this._trustByAccountId.set(accountId, boundedTrust);
-		return boundedTrust;
+	lastInvalidResultTickOf(accountId: AccountId): number | undefined {
+		return this._lastInvalidResultTickByAccountId.get(accountId);
 	}
 }

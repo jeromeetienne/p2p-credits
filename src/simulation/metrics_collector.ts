@@ -1,7 +1,8 @@
 import type { Ledger } from '../ledger/ledger.js';
+import type { SuspensionBook } from '../trust/suspension_book.js';
 import type { TrustScoreBook } from '../trust/trust_score.js';
 import type { AccountId } from '../types/account_types.js';
-import type { SimulationReport, TaskTypePricingSummary, WorkerSummary } from './simulation_types.js';
+import type { DeviceSummary, SimulationReport, TaskTypePricingSummary, WorkerSummary } from './simulation_types.js';
 import type { WorkerProfile } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -44,6 +45,12 @@ export class MetricsCollector {
 
 	/** Number of tasks where no value reached a majority. */
 	private _unresolvedTaskCount = 0;
+
+	/** Number of tasks nobody executed, because every device was suspended at that moment. */
+	private _unassignedTaskCount = 0;
+
+	/** Amount of credits taken back from workers caught returning a wrong result. */
+	private _confiscatedCredits = 0;
 
 	/** Amount of credits created only because the benchmark did not measure the true cost. */
 	private _creditsCreatedByPricingError = 0;
@@ -117,6 +124,25 @@ export class MetricsCollector {
 	}
 
 	/**
+	 * Records that one task found no device to run on, because every device was suspended at that moment.
+	 *
+	 * @returns Nothing.
+	 */
+	recordUnassignedTask(): void {
+		this._unassignedTaskCount += 1;
+	}
+
+	/**
+	 * Records that the network took credits back from a worker caught returning a wrong result.
+	 *
+	 * @param amount Amount taken back, in credits.
+	 * @returns Nothing.
+	 */
+	recordConfiscation(amount: number): void {
+		this._confiscatedCredits += amount;
+	}
+
+	/**
 	 * Records the tick at which one account reached the trusted threshold, and keeps only the first one.
 	 *
 	 * @param accountId Identifier of the account.
@@ -136,23 +162,29 @@ export class MetricsCollector {
 	 * @param tickCount Number of ticks the run lasted.
 	 * @param ledger The ledger of the run, read to obtain the balances and the totals.
 	 * @param trustScoreBook The trust scores of the run.
+	 * @param suspensionBook The suspensions pronounced during the run.
 	 * @param workerProfiles Every simulated worker of the run.
 	 * @param taskTypePricingSummaries What each task type was paid, compared with what it was worth.
+	 * @param deviceSummaries What each device earned in trust, and when it joined the network.
 	 * @returns The report of the run.
 	 */
 	buildReport(
 		tickCount: number,
 		ledger: Ledger,
 		trustScoreBook: TrustScoreBook,
+		suspensionBook: SuspensionBook,
 		workerProfiles: WorkerProfile[],
 		taskTypePricingSummaries: TaskTypePricingSummary[],
+		deviceSummaries: DeviceSummary[],
 	): SimulationReport {
 		const workerSummaries: WorkerSummary[] = workerProfiles.map((workerProfile) => {
 			return {
 				accountId: workerProfile.accountId,
 				behaviorName: workerProfile.behaviorName,
 				balance: ledger.balanceOf(workerProfile.accountId),
-				trust: trustScoreBook.trustOf(workerProfile.accountId),
+				trust: trustScoreBook.trustOf(workerProfile.accountId, workerProfile.deviceId),
+				accountTrust: trustScoreBook.accountTrustOf(workerProfile.accountId),
+				deviceTrust: trustScoreBook.deviceTrustOf(workerProfile.deviceId),
 				confirmedResultCount: trustScoreBook.confirmedResultCountOf(workerProfile.accountId),
 				invalidResultCount: trustScoreBook.invalidResultCountOf(workerProfile.accountId),
 				firstTrustedTick: this._firstTrustedTickByAccountId.get(workerProfile.accountId),
@@ -176,12 +208,16 @@ export class MetricsCollector {
 			creditsAwardedForWrongResults: this._creditsAwardedForWrongResults,
 			correctResultRejectedCount: this._correctResultRejectedCount,
 			unresolvedTaskCount: this._unresolvedTaskCount,
+			unassignedTaskCount: this._unassignedTaskCount,
+			suspensionCount: suspensionBook.suspensionCount(),
+			confiscatedCredits: this._confiscatedCredits,
 			totalCreditsCreated: ledger.totalCreditsCreated(),
 			totalCreditsConsumed: ledger.totalCreditsConsumed(),
 			creditsCreatedByPricingError: this._creditsCreatedByPricingError,
 			pricingArbitrageRatio: MetricsCollector._arbitrageRatioOf(taskTypePricingSummaries),
 			taskTypePricingSummaries: taskTypePricingSummaries,
 			workerSummaries: workerSummaries,
+			deviceSummaries: deviceSummaries,
 		};
 	}
 

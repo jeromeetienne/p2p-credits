@@ -1,5 +1,5 @@
 import type { AccountId } from '../types/account_types.js';
-import type { Device } from '../types/device_types.js';
+import type { Device, DeviceEligibilityFn } from '../types/device_types.js';
 import type { RandomNumberFn } from '../types/random_types.js';
 import type { Task, TaskAssignment } from '../types/task_types.js';
 
@@ -15,6 +15,8 @@ export type ValidatorSelectorOptions = {
 	devices: Device[];
 	/** The source of randomness, so a simulation can reproduce a run exactly. */
 	randomNumberFn: RandomNumberFn;
+	/** Says whether a device receives tasks right now. Every device receives tasks when this is left out. */
+	isDeviceEligibleFn?: DeviceEligibilityFn;
 };
 
 /**
@@ -31,12 +33,19 @@ export class ValidatorSelector {
 	/** The source of randomness. */
 	private _randomNumberFn: RandomNumberFn;
 
+	/** Says whether a device receives tasks right now. */
+	private _isDeviceEligibleFn: DeviceEligibilityFn;
+
 	/**
-	 * @param validatorSelectorOptions The devices able to execute a task and the source of randomness.
+	 * @param validatorSelectorOptions The devices able to execute a task, the source of randomness, and the question
+	 *        asked before a device is given a duplicated copy.
 	 */
 	constructor(validatorSelectorOptions: ValidatorSelectorOptions) {
 		this._devices = validatorSelectorOptions.devices;
 		this._randomNumberFn = validatorSelectorOptions.randomNumberFn;
+		this._isDeviceEligibleFn = validatorSelectorOptions.isDeviceEligibleFn ?? (() => {
+			return true;
+		});
 	}
 
 	/**
@@ -44,11 +53,14 @@ export class ValidatorSelector {
 	 *
 	 * @param task The task to duplicate.
 	 * @param excludedAccountIds The accounts that already returned a result for this task.
-	 * @returns The assignment of the duplicated copy, or `undefined` when every account is excluded.
+	 * @returns The assignment of the duplicated copy, or `undefined` when every account is excluded or set aside.
 	 */
 	chooseValidator(task: Task, excludedAccountIds: AccountId[]): TaskAssignment | undefined {
 		const candidateDevices = this._devices.filter((device) => {
-			return excludedAccountIds.includes(device.accountId) === false;
+			if (excludedAccountIds.includes(device.accountId) === true) {
+				return false;
+			}
+			return this._isDeviceEligibleFn(device);
 		});
 		if (candidateDevices.length === 0) {
 			return undefined;

@@ -7,7 +7,7 @@
 export type { Account, AccountId } from './types/account_types.js';
 export { AccountIdSchema, AccountSchema } from './types/account_types.js';
 
-export type { Device, DeviceId } from './types/device_types.js';
+export type { Device, DeviceEligibilityFn, DeviceId } from './types/device_types.js';
 export { DeviceIdSchema, DeviceSchema } from './types/device_types.js';
 
 export type {
@@ -51,7 +51,10 @@ export { RecalibrationCheck } from './pricing/recalibration_check.js';
 export type { EnvironmentDifference } from './pricing/recalibration_check.js';
 
 export { TrustScoreBook } from './trust/trust_score.js';
-export type { TrustScoreBookOptions } from './trust/trust_score.js';
+export type { TrustChange, TrustScoreBookOptions } from './trust/trust_score.js';
+export { TrustPolicy, PenaltyPolicyNameSchema } from './trust/trust_policy.js';
+export type { PenaltyPolicyName, TrustOutcome, TrustPolicyOptions } from './trust/trust_policy.js';
+export { SuspensionBook } from './trust/suspension_book.js';
 
 export { ResultComparator } from './validation/result_comparator.js';
 export type { ComparisonOutcome } from './validation/result_comparator.js';
@@ -70,6 +73,7 @@ export { RandomGenerator } from './simulation/random_generator.js';
 export { SimulationClock } from './simulation/simulation_clock.js';
 export { SimulationEngine } from './simulation/simulation_engine.js';
 export type {
+	DeviceSummary,
 	SimulationParameters,
 	SimulationReport,
 	TaskTypePricingSummary,

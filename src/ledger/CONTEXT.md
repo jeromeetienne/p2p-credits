@@ -11,6 +11,7 @@ The append-only list of the movements of credits, and the balances reconstructed
 - No balance is ever stored as a separate number. Every balance is added from the movements, so no stored total can ever disagree with them.
 - The ledger imports nothing from `pricing/`, `trust/`, or `validation/`. It receives an amount and a validation status, and it stores them. This is what lets the accounting stay simple while the three other questions stay hard.
 - A credit that waits for a validation is not spendable, and a debit always counts, so an account can never hide a debt behind a pending credit.
+- The ledger answers what an account was paid for results nobody verified, and what was already taken back from it, but it never decides to take anything back. The penalty is decided in `trust/` and the movement is recorded here.
 
 ## Background
 - The fields of a movement and the reconstruction of the balance come from section 5 of [the design note](../../docs/design_note.md). Which movements are final, provisional, or settled in batches is left open by section 12.4 and is milestone 5 of [issue #2](https://github.com/jeromeetienne/p2p-credits/issues/2).

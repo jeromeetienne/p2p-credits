@@ -86,6 +86,41 @@ export class Ledger {
 	}
 
 	/**
+	 * Returns the amount an account was paid for results nobody ever verified.
+	 *
+	 * Those results are the ones a penalty can take back, because a worker caught cheating once makes every result
+	 * of its that nobody looked at suspect.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @returns The amount paid for unverified results, in credits.
+	 */
+	unverifiedCreditTotalOf(accountId: AccountId): number {
+		let total = 0;
+		for (const ledgerEntry of this.entriesOf(accountId)) {
+			if (ledgerEntry.entryType === 'credit' && ledgerEntry.validationStatus === 'unverified') {
+				total += ledgerEntry.amount;
+			}
+		}
+		return total;
+	}
+
+	/**
+	 * Returns the sum of the corrections recorded for an account, which is negative when credits were taken back.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @returns The sum of the adjustments, in credits.
+	 */
+	adjustmentTotalOf(accountId: AccountId): number {
+		let total = 0;
+		for (const ledgerEntry of this.entriesOf(accountId)) {
+			if (ledgerEntry.entryType === 'adjustment') {
+				total += ledgerEntry.amount;
+			}
+		}
+		return total;
+	}
+
+	/**
 	 * Returns the total amount of credits created by the network, which is the sum of every credit and of every
 	 * positive adjustment.
 	 *

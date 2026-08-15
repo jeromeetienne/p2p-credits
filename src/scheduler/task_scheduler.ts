@@ -1,4 +1,4 @@
-import type { Device } from '../types/device_types.js';
+import type { Device, DeviceEligibilityFn } from '../types/device_types.js';
 import type { RandomNumberFn } from '../types/random_types.js';
 import type { Task, TaskAssignment } from '../types/task_types.js';
 
@@ -14,6 +14,8 @@ export type TaskSchedulerOptions = {
 	devices: Device[];
 	/** The source of randomness, so a simulation can reproduce a run exactly. */
 	randomNumberFn: RandomNumberFn;
+	/** Says whether a device receives tasks right now. Every device receives tasks when this is left out. */
+	isDeviceEligibleFn?: DeviceEligibilityFn;
 };
 
 /**
@@ -30,29 +32,42 @@ export class TaskScheduler {
 	/** The source of randomness. */
 	private _randomNumberFn: RandomNumberFn;
 
+	/** Says whether a device receives tasks right now. */
+	private _isDeviceEligibleFn: DeviceEligibilityFn;
+
 	/**
-	 * @param taskSchedulerOptions The devices able to execute a task and the source of randomness.
+	 * @param taskSchedulerOptions The devices able to execute a task, the source of randomness, and the question
+	 *        asked before a device is given a task.
 	 */
 	constructor(taskSchedulerOptions: TaskSchedulerOptions) {
 		this._devices = taskSchedulerOptions.devices;
 		this._randomNumberFn = taskSchedulerOptions.randomNumberFn;
+		this._isDeviceEligibleFn = taskSchedulerOptions.isDeviceEligibleFn ?? (() => {
+			return true;
+		});
 	}
 
 	/**
-	 * Assigns one task to one device chosen at random.
+	 * Assigns one task to one device chosen at random among the devices that receive tasks right now.
 	 *
 	 * @param task The task to assign.
-	 * @returns The assignment of the task to a device.
-	 * @throws When no device is able to execute the task.
+	 * @returns The assignment of the task to a device, or `undefined` when no device receives tasks right now.
+	 * @throws When the scheduler was built with no device at all.
 	 */
-	assign(task: Task): TaskAssignment {
+	assign(task: Task): TaskAssignment | undefined {
 		if (this._devices.length === 0) {
 			throw new Error('no device is able to execute a task');
 		}
-		const deviceIndex = Math.floor(this._randomNumberFn() * this._devices.length);
-		const device = this._devices[deviceIndex];
+		const eligibleDevices = this._devices.filter((candidateDevice) => {
+			return this._isDeviceEligibleFn(candidateDevice);
+		});
+		if (eligibleDevices.length === 0) {
+			return undefined;
+		}
+		const deviceIndex = Math.floor(this._randomNumberFn() * eligibleDevices.length);
+		const device = eligibleDevices[deviceIndex];
 		if (device === undefined) {
-			throw new Error(`the device index ${deviceIndex} is outside the list of devices`);
+			return undefined;
 		}
 		return {
 			taskId: task.taskId,

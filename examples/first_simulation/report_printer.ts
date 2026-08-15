@@ -1,4 +1,4 @@
-import type { SimulationReport, WorkerBehaviorName, WorkerSummary } from '../../src/index.js';
+import type { DeviceSummary, SimulationReport, WorkerBehaviorName, WorkerSummary } from '../../src/index.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -14,12 +14,30 @@ type BehaviorSummary = {
 	workerCount: number;
 	/** Sum of the balances of the workers of the group, in credits. */
 	totalBalance: number;
-	/** Average trust score of the workers of the group. */
-	averageTrust: number;
+	/** Average trust of the accounts of the group. */
+	averageAccountTrust: number;
+	/** Average trust of the devices of the group. */
+	averageDeviceTrust: number;
 	/** Number of results of the group that other workers contradicted. */
 	invalidResultCount: number;
 	/** Average tick at which a worker of the group first reached the trusted threshold. */
 	averageFirstTrustedTick: number | undefined;
+};
+
+/** The metrics of one group of devices that share the same behaviour and joined at the same tick. */
+type DeviceGroupSummary = {
+	/** The behaviour shared by the owners of the devices of the group. */
+	behaviorName: WorkerBehaviorName;
+	/** Tick at which the devices of the group joined the network. */
+	addedAtTick: number;
+	/** Number of devices in the group. */
+	deviceCount: number;
+	/** Average trust of the devices of the group. */
+	averageDeviceTrust: number;
+	/** Average trust of the accounts that own the devices of the group. */
+	averageAccountTrust: number;
+	/** Average trust a worker of the group is judged with when it uses one of these devices. */
+	averageCombinedTrust: number;
 };
 
 /** The printed form of the report of one run. */
@@ -54,6 +72,11 @@ export class ReportPrinter {
 		);
 		console.log(`correct results rejected         ${simulationReport.correctResultRejectedCount}`);
 		console.log(`tasks with no majority           ${simulationReport.unresolvedTaskCount}`);
+		console.log(`tasks nobody could execute       ${simulationReport.unassignedTaskCount}`);
+		console.log(`suspensions pronounced           ${simulationReport.suspensionCount}`);
+		console.log(
+			`credits taken back               ${ReportPrinter._formatCredits(simulationReport.confiscatedCredits)}`,
+		);
 		console.log('');
 
 		console.log('--- economics ---');
@@ -93,20 +116,57 @@ export class ReportPrinter {
 		console.log('');
 
 		console.log('--- workers ---');
-		console.log('behaviour    workers  total balance  average trust  invalid results  trusted at tick');
+		console.log(
+			ReportPrinter._formatWorkerRow([
+				'behaviour',
+				'workers',
+				'total balance',
+				'account trust',
+				'device trust',
+				'invalid results',
+				'trusted at tick',
+			]),
+		);
 		for (const behaviorSummary of ReportPrinter._summarizeByBehavior(simulationReport.workerSummaries)) {
-			const behaviorName = behaviorSummary.behaviorName.padEnd(12, ' ');
-			const workerCount = String(behaviorSummary.workerCount).padStart(7, ' ');
-			const totalBalance = ReportPrinter._formatCredits(behaviorSummary.totalBalance).padStart(15, ' ');
-			const averageTrust = ReportPrinter._formatNumber(behaviorSummary.averageTrust).padStart(15, ' ');
-			const invalidResultCount = String(behaviorSummary.invalidResultCount).padStart(17, ' ');
 			let trustedTickText = 'never';
 			if (behaviorSummary.averageFirstTrustedTick !== undefined) {
 				trustedTickText = ReportPrinter._formatNumber(behaviorSummary.averageFirstTrustedTick);
 			}
-			const firstTrustedTick = trustedTickText.padStart(17, ' ');
 			console.log(
-				`${behaviorName}${workerCount}${totalBalance}${averageTrust}${invalidResultCount}${firstTrustedTick}`,
+				ReportPrinter._formatWorkerRow([
+					behaviorSummary.behaviorName,
+					String(behaviorSummary.workerCount),
+					ReportPrinter._formatCredits(behaviorSummary.totalBalance),
+					ReportPrinter._formatNumber(behaviorSummary.averageAccountTrust),
+					ReportPrinter._formatNumber(behaviorSummary.averageDeviceTrust),
+					String(behaviorSummary.invalidResultCount),
+					trustedTickText,
+				]),
+			);
+		}
+		console.log('');
+
+		console.log('--- devices ---');
+		console.log(
+			ReportPrinter._formatDeviceRow([
+				'behaviour',
+				'devices',
+				'joined at tick',
+				'device trust',
+				'account trust',
+				'combined trust',
+			]),
+		);
+		for (const deviceGroupSummary of ReportPrinter._summarizeDevices(simulationReport.deviceSummaries)) {
+			console.log(
+				ReportPrinter._formatDeviceRow([
+					deviceGroupSummary.behaviorName,
+					String(deviceGroupSummary.deviceCount),
+					String(deviceGroupSummary.addedAtTick),
+					ReportPrinter._formatNumber(deviceGroupSummary.averageDeviceTrust),
+					ReportPrinter._formatNumber(deviceGroupSummary.averageAccountTrust),
+					ReportPrinter._formatNumber(deviceGroupSummary.averageCombinedTrust),
+				]),
 			);
 		}
 		console.log('');
@@ -131,13 +191,15 @@ export class ReportPrinter {
 			}
 
 			let totalBalance = 0;
-			let totalTrust = 0;
+			let totalAccountTrust = 0;
+			let totalDeviceTrust = 0;
 			let invalidResultCount = 0;
 			let totalFirstTrustedTick = 0;
 			let trustedWorkerCount = 0;
 			for (const workerSummary of groupSummaries) {
 				totalBalance += workerSummary.balance;
-				totalTrust += workerSummary.trust;
+				totalAccountTrust += workerSummary.accountTrust;
+				totalDeviceTrust += workerSummary.deviceTrust;
 				invalidResultCount += workerSummary.invalidResultCount;
 				if (workerSummary.firstTrustedTick !== undefined) {
 					totalFirstTrustedTick += workerSummary.firstTrustedTick;
@@ -154,7 +216,8 @@ export class ReportPrinter {
 				behaviorName: behaviorName,
 				workerCount: groupSummaries.length,
 				totalBalance: totalBalance,
-				averageTrust: totalTrust / groupSummaries.length,
+				averageAccountTrust: totalAccountTrust / groupSummaries.length,
+				averageDeviceTrust: totalDeviceTrust / groupSummaries.length,
 				invalidResultCount: invalidResultCount,
 				averageFirstTrustedTick: averageFirstTrustedTick,
 			});
@@ -164,13 +227,91 @@ export class ReportPrinter {
 	}
 
 	/**
+	 * Groups the devices by the behaviour of their owner and by the tick they joined at, and adds their numbers.
+	 *
+	 * @param deviceSummaries What each device earned in trust, and when it joined the network.
+	 * @returns One line of metrics per group of devices.
+	 */
+	private static _summarizeDevices(deviceSummaries: DeviceSummary[]): DeviceGroupSummary[] {
+		const deviceGroupSummaries: DeviceGroupSummary[] = [];
+		const behaviorNames: WorkerBehaviorName[] = ['honest', 'unstable', 'malicious'];
+
+		const joinedTicks = [...new Set(deviceSummaries.map((deviceSummary) => {
+			return deviceSummary.addedAtTick;
+		}))].sort((tickA, tickB) => {
+			return tickA - tickB;
+		});
+
+		for (const behaviorName of behaviorNames) {
+			for (const addedAtTick of joinedTicks) {
+				const groupSummaries = deviceSummaries.filter((deviceSummary) => {
+					return deviceSummary.behaviorName === behaviorName && deviceSummary.addedAtTick === addedAtTick;
+				});
+				if (groupSummaries.length === 0) {
+					continue;
+				}
+
+				let totalDeviceTrust = 0;
+				let totalAccountTrust = 0;
+				let totalCombinedTrust = 0;
+				for (const deviceSummary of groupSummaries) {
+					totalDeviceTrust += deviceSummary.deviceTrust;
+					totalAccountTrust += deviceSummary.accountTrust;
+					totalCombinedTrust += deviceSummary.combinedTrust;
+				}
+
+				deviceGroupSummaries.push({
+					behaviorName: behaviorName,
+					addedAtTick: addedAtTick,
+					deviceCount: groupSummaries.length,
+					averageDeviceTrust: totalDeviceTrust / groupSummaries.length,
+					averageAccountTrust: totalAccountTrust / groupSummaries.length,
+					averageCombinedTrust: totalCombinedTrust / groupSummaries.length,
+				});
+			}
+		}
+
+		return deviceGroupSummaries;
+	}
+
+	/**
+	 * Writes one line of the table of devices, so that the heading and the lines below it always line up.
+	 *
+	 * @param cells The six cells of the line, from the behaviour to the combined trust.
+	 * @returns The written line.
+	 */
+	private static _formatDeviceRow(cells: string[]): string {
+		return ReportPrinter._formatRow(cells, [13, 9, 16, 15, 15, 16]);
+	}
+
+	/**
+	 * Writes one line of the table of workers, so that the heading and the lines below it always line up.
+	 *
+	 * @param cells The seven cells of the line, from the behaviour to the tick the group became trusted at.
+	 * @returns The written line.
+	 */
+	private static _formatWorkerRow(cells: string[]): string {
+		return ReportPrinter._formatRow(cells, [13, 9, 16, 15, 14, 17, 17]);
+	}
+
+	/**
 	 * Writes one line of the table of prices, so that the heading and the lines below it always line up.
 	 *
 	 * @param cells The six cells of the line, from the name of the task type to the profitability.
 	 * @returns The written line.
 	 */
 	private static _formatPricingRow(cells: string[]): string {
-		const cellWidths = [17, 11, 15, 11, 12, 15];
+		return ReportPrinter._formatRow(cells, [17, 11, 15, 11, 12, 15]);
+	}
+
+	/**
+	 * Writes one line of a table, with the first cell against the left and every other cell against the right.
+	 *
+	 * @param cells The cells of the line.
+	 * @param cellWidths The width of every cell, in characters.
+	 * @returns The written line.
+	 */
+	private static _formatRow(cells: string[], cellWidths: number[]): string {
 		const writtenCells = cells.map((cell, cellIndex) => {
 			const cellWidth = cellWidths[cellIndex] ?? 12;
 			if (cellIndex === 0) {

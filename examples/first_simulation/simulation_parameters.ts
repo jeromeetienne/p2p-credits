@@ -16,12 +16,23 @@ import type { SimulationParameters } from '../../src/index.js';
  * Those three costs are the true ones, and the network never reads them. The benchmark measures each task type five
  * times, and every measured run misses the true cost by up to one tenth, so the prices the network uses are wrong by
  * a few percent, as they always are in reality.
+ *
+ * A new worker sees one task out of two duplicated, a trusted worker one out of twenty, and a worker caught recently
+ * sees nine out of ten. Half of the trust of a worker comes from its account and half from its device, so a trusted
+ * account that adds an unknown device is trusted half as much on that device as on the one it earned its history on.
+ *
+ * At the tick in the middle of the run, every worker adds a second device the network has never seen. The device
+ * table at the end of the report then shows what each account handed to that new device.
  */
 export const firstSimulationParameters: SimulationParameters = {
 	randomSeed: 20260815,
 	tickCount: 200,
 	tasksPerTick: 10,
-	validationRate: 0.1,
+	untrustedValidationRate: 0.5,
+	trustedValidationRate: 0.05,
+	recentErrorValidationRate: 0.9,
+	untrustedThreshold: 0,
+	recentErrorTickCount: 20,
 	honestWorkerCount: 20,
 	unstableWorkerCount: 4,
 	unstableErrorProbability: 0.05,
@@ -53,6 +64,11 @@ export const firstSimulationParameters: SimulationParameters = {
 	initialTrust: 0,
 	trustIncreaseOnConfirmedResult: 1,
 	trustDecreaseOnInvalidResult: 5,
+	strongPenaltyFactor: 4,
+	penaltyPolicyName: 'credit confiscation',
+	suspensionTickCount: 20,
+	deviceTrustWeight: 0.5,
+	secondDeviceTick: 100,
 	minimumTrust: -20,
 	maximumTrust: 100,
 	trustedThreshold: 10,
