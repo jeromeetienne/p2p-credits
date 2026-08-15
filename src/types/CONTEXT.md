@@ -7,6 +7,7 @@ The shapes shared by every module of the library: the account, the device, the t
 - `account_types.ts`: the identity of a participant of the network.
 - `device_types.ts`: the machine that executes a task on behalf of an account.
 - `task_types.ts`: the task, its type, its assignment, its result, and the validation status of that result.
+- `benchmark_types.ts`: the environment a price is measured in, and one measured run.
 - `ledger_types.ts`: the movements of credits recorded by the ledger.
 - `random_types.ts`: `RandomNumberFn`, the source of randomness every policy receives.
 

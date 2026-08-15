@@ -1,7 +1,7 @@
 import type { Ledger } from '../ledger/ledger.js';
 import type { TrustScoreBook } from '../trust/trust_score.js';
 import type { AccountId } from '../types/account_types.js';
-import type { SimulationReport, WorkerSummary } from './simulation_types.js';
+import type { SimulationReport, TaskTypePricingSummary, WorkerSummary } from './simulation_types.js';
 import type { WorkerProfile } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -45,6 +45,9 @@ export class MetricsCollector {
 	/** Number of tasks where no value reached a majority. */
 	private _unresolvedTaskCount = 0;
 
+	/** Amount of credits created only because the benchmark did not measure the true cost. */
+	private _creditsCreatedByPricingError = 0;
+
 	/** Tick at which each account first reached the trusted threshold. */
 	private _firstTrustedTickByAccountId = new Map<AccountId, number>();
 
@@ -79,9 +82,11 @@ export class MetricsCollector {
 	 *
 	 * @param isResultCorrect True when the paid value was the correct value of the task.
 	 * @param amount Amount paid, in credits.
+	 * @param trueAmount Amount the network would have paid if the benchmark had measured the true cost, in credits.
 	 * @returns Nothing.
 	 */
-	recordPaidResult(isResultCorrect: boolean, amount: number): void {
+	recordPaidResult(isResultCorrect: boolean, amount: number, trueAmount: number): void {
+		this._creditsCreatedByPricingError += amount - trueAmount;
 		if (isResultCorrect === false) {
 			this._wrongResultUndetectedCount += 1;
 			this._creditsAwardedForWrongResults += amount;
@@ -132,6 +137,7 @@ export class MetricsCollector {
 	 * @param ledger The ledger of the run, read to obtain the balances and the totals.
 	 * @param trustScoreBook The trust scores of the run.
 	 * @param workerProfiles Every simulated worker of the run.
+	 * @param taskTypePricingSummaries What each task type was paid, compared with what it was worth.
 	 * @returns The report of the run.
 	 */
 	buildReport(
@@ -139,6 +145,7 @@ export class MetricsCollector {
 		ledger: Ledger,
 		trustScoreBook: TrustScoreBook,
 		workerProfiles: WorkerProfile[],
+		taskTypePricingSummaries: TaskTypePricingSummary[],
 	): SimulationReport {
 		const workerSummaries: WorkerSummary[] = workerProfiles.map((workerProfile) => {
 			return {
@@ -171,7 +178,33 @@ export class MetricsCollector {
 			unresolvedTaskCount: this._unresolvedTaskCount,
 			totalCreditsCreated: ledger.totalCreditsCreated(),
 			totalCreditsConsumed: ledger.totalCreditsConsumed(),
+			creditsCreatedByPricingError: this._creditsCreatedByPricingError,
+			pricingArbitrageRatio: MetricsCollector._arbitrageRatioOf(taskTypePricingSummaries),
+			taskTypePricingSummaries: taskTypePricingSummaries,
 			workerSummaries: workerSummaries,
 		};
+	}
+
+	/**
+	 * Divides the highest profitability ratio by the lowest one, which measures how much a worker would gain by
+	 * picking the task type the benchmark over-measured.
+	 *
+	 * @param taskTypePricingSummaries What each task type was paid, compared with what it was worth.
+	 * @returns The arbitrage ratio, which is 1 when every task type pays exactly the work it costs.
+	 */
+	private static _arbitrageRatioOf(taskTypePricingSummaries: TaskTypePricingSummary[]): number {
+		if (taskTypePricingSummaries.length === 0) {
+			return 1;
+		}
+		let highestRatio = Number.NEGATIVE_INFINITY;
+		let lowestRatio = Number.POSITIVE_INFINITY;
+		for (const taskTypePricingSummary of taskTypePricingSummaries) {
+			highestRatio = Math.max(highestRatio, taskTypePricingSummary.profitabilityRatio);
+			lowestRatio = Math.min(lowestRatio, taskTypePricingSummary.profitabilityRatio);
+		}
+		if (lowestRatio <= 0) {
+			return Number.POSITIVE_INFINITY;
+		}
+		return highestRatio / lowestRatio;
 	}
 }

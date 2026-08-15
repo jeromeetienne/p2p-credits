@@ -29,6 +29,9 @@ export {
 	ValidationStatusSchema,
 } from './types/task_types.js';
 
+export type { BenchmarkEnvironment, BenchmarkRun } from './types/benchmark_types.js';
+export { BenchmarkEnvironmentSchema, BenchmarkRunSchema } from './types/benchmark_types.js';
+
 export type { LedgerEntry, LedgerEntryDraft, LedgerEntryType } from './types/ledger_types.js';
 export {
 	LedgerEntryDraftSchema,
@@ -42,6 +45,10 @@ export { Ledger } from './ledger/ledger.js';
 
 export { TaskPricer } from './pricing/task_pricer.js';
 export type { TaskPricerOptions } from './pricing/task_pricer.js';
+export { ReferenceBenchmark } from './pricing/reference_benchmark.js';
+export type { ReferenceBenchmarkOptions } from './pricing/reference_benchmark.js';
+export { RecalibrationCheck } from './pricing/recalibration_check.js';
+export type { EnvironmentDifference } from './pricing/recalibration_check.js';
 
 export { TrustScoreBook } from './trust/trust_score.js';
 export type { TrustScoreBookOptions } from './trust/trust_score.js';
@@ -65,6 +72,8 @@ export { SimulationEngine } from './simulation/simulation_engine.js';
 export type {
 	SimulationParameters,
 	SimulationReport,
+	TaskTypePricingSummary,
+	TrueTaskCost,
 	WorkerSummary,
 } from './simulation/simulation_types.js';
 export { WorkerBehavior, WorkerBehaviorNameSchema, WorkerProfileSchema } from './simulation/worker_behavior.js';

@@ -62,6 +62,36 @@ export class ReportPrinter {
 		console.log(`credits consumed                 ${creditsConsumed}`);
 		console.log('');
 
+		console.log('--- price ---');
+		const creditsFromPricingError = ReportPrinter._formatCredits(simulationReport.creditsCreatedByPricingError);
+		console.log(`credits created by the pricing error   ${creditsFromPricingError}`);
+		console.log(
+			`arbitrage between the task types       ${ReportPrinter._formatNumber(simulationReport.pricingArbitrageRatio)}`,
+		);
+		console.log(
+			ReportPrinter._formatPricingRow([
+				'task type',
+				'true cost',
+				'measured cost',
+				'price',
+				'true price',
+				'profitability',
+			]),
+		);
+		for (const taskTypePricingSummary of simulationReport.taskTypePricingSummaries) {
+			console.log(
+				ReportPrinter._formatPricingRow([
+					taskTypePricingSummary.taskTypeName,
+					`${taskTypePricingSummary.trueCostSeconds.toFixed(2)} s`,
+					`${taskTypePricingSummary.measuredCostSeconds.toFixed(2)} s`,
+					taskTypePricingSummary.price.toFixed(3),
+					taskTypePricingSummary.truePrice.toFixed(3),
+					taskTypePricingSummary.profitabilityRatio.toFixed(3),
+				]),
+			);
+		}
+		console.log('');
+
 		console.log('--- workers ---');
 		console.log('behaviour    workers  total balance  average trust  invalid results  trusted at tick');
 		for (const behaviorSummary of ReportPrinter._summarizeByBehavior(simulationReport.workerSummaries)) {
@@ -131,6 +161,24 @@ export class ReportPrinter {
 		}
 
 		return behaviorSummaries;
+	}
+
+	/**
+	 * Writes one line of the table of prices, so that the heading and the lines below it always line up.
+	 *
+	 * @param cells The six cells of the line, from the name of the task type to the profitability.
+	 * @returns The written line.
+	 */
+	private static _formatPricingRow(cells: string[]): string {
+		const cellWidths = [17, 11, 15, 11, 12, 15];
+		const writtenCells = cells.map((cell, cellIndex) => {
+			const cellWidth = cellWidths[cellIndex] ?? 12;
+			if (cellIndex === 0) {
+				return cell.padEnd(cellWidth, ' ');
+			}
+			return cell.padStart(cellWidth, ' ');
+		});
+		return writtenCells.join('');
 	}
 
 	/**

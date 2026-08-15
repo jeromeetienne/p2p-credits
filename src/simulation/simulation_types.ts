@@ -1,5 +1,6 @@
 import type { AccountId } from '../types/account_types.js';
-import type { TaskType } from '../types/task_types.js';
+import type { BenchmarkEnvironment } from '../types/benchmark_types.js';
+import type { TaskTypeName } from '../types/task_types.js';
 import type { WorkerBehaviorName } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -7,6 +8,19 @@ import type { WorkerBehaviorName } from './worker_behavior.js';
 //	SimulationTypes — what a run receives and what a run measures
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+
+/**
+ * The cost one task type truly takes on the reference machine.
+ *
+ * Only the simulation knows this value. The network never reads it: the network reads the value the benchmark
+ * measured, which carries the measurement noise of the run.
+ */
+export type TrueTaskCost = {
+	/** Name of the task type. */
+	taskTypeName: TaskTypeName;
+	/** Cost the task type truly takes on the reference machine, in seconds. */
+	trueCostSeconds: number;
+};
 
 /**
  * Everything one run of the simulation needs.
@@ -31,12 +45,22 @@ export type SimulationParameters = {
 	unstableErrorProbability: number;
 	/** Number of malicious workers. */
 	maliciousWorkerCount: number;
-	/** Every task type the network knows, with the cost each one takes on the reference machine. */
-	taskTypes: TaskType[];
-	/** Cost of the reference task, in seconds measured on the reference machine. */
-	referenceTaskCostSeconds: number;
+	/** Every task type the network knows, with the cost each one truly takes on the reference machine. */
+	taskCosts: TrueTaskCost[];
+	/** Name of the task type used as the reference, against which every other task type is compared. */
+	referenceTaskTypeName: TaskTypeName;
 	/** Number of credits paid for one reference task. */
 	creditPerReferenceTask: number;
+	/** The environment the benchmark is measured in, and that the network runs in. */
+	benchmarkEnvironment: BenchmarkEnvironment;
+	/** Number of runs measured for every task type, to smooth the measurement noise. */
+	benchmarkRunCount: number;
+	/**
+	 * Largest share by which one measured run can miss the true cost, between 0 and 1. A value of 0.1 spreads every
+	 * measured run between nine tenths and eleven tenths of the true cost, which is the pricing error of section 10
+	 * of the design note.
+	 */
+	pricingErrorRatio: number;
 	/** Trust score given to an account the first time it is seen. */
 	initialTrust: number;
 	/** Amount added to the trust score when a result is confirmed by another worker. */
@@ -67,6 +91,25 @@ export type WorkerSummary = {
 	invalidResultCount: number;
 	/** Tick at which the worker first reached the trusted threshold, or `undefined` when it never did. */
 	firstTrustedTick: number | undefined;
+};
+
+/** What one task type was paid, compared with what it was worth. */
+export type TaskTypePricingSummary = {
+	/** Name of the task type. */
+	taskTypeName: TaskTypeName;
+	/** Cost the task type truly takes on the reference machine, in seconds. */
+	trueCostSeconds: number;
+	/** Cost the benchmark measured for the task type, in seconds. */
+	measuredCostSeconds: number;
+	/** Price the network pays for the task type, in credits, computed from the measured cost. */
+	price: number;
+	/** Price the network would pay if the benchmark had measured the true cost, in credits. */
+	truePrice: number;
+	/**
+	 * The price divided by the true price. A value of 1 pays exactly the work performed, a value above 1 pays more
+	 * than the work performed, and the task type is then more profitable than the others.
+	 */
+	profitabilityRatio: number;
 };
 
 /**
@@ -102,6 +145,19 @@ export type SimulationReport = {
 	totalCreditsCreated: number;
 	/** Total amount of credits consumed by the users of the network during the run. */
 	totalCreditsConsumed: number;
+	/**
+	 * Amount of credits created only because the benchmark did not measure the true cost, in credits. A negative
+	 * amount means the network paid its workers less than the work they performed.
+	 */
+	creditsCreatedByPricingError: number;
+	/**
+	 * The highest profitability ratio divided by the lowest one. A value of 1 means every task type pays exactly the
+	 * work it costs, and a value above 1 measures how much a worker would gain by picking the task type that the
+	 * benchmark over-measured, which is the arbitrage of section 12.7 of the design note.
+	 */
+	pricingArbitrageRatio: number;
+	/** What each task type was paid, compared with what it was worth. */
+	taskTypePricingSummaries: TaskTypePricingSummary[];
 	/** What each worker earned, and how the network judged it. */
 	workerSummaries: WorkerSummary[];
 };

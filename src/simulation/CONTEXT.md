@@ -13,7 +13,8 @@ The primitives that run a simulated network over the rest of the library: virtua
 
 ## Rules
 - No inference is ever executed. Each task has one correct value, and the behaviour of the worker decides whether that value is returned.
-- Only this folder knows which value was the correct one. The rest of the library judges a result exclusively by comparing it with the result of another worker, and must never receive that information.
+- Only this folder knows which value was the correct one, and only this folder knows the true cost of a task type. The rest of the library judges a result exclusively by comparing it with the result of another worker, and prices a task exclusively from what the benchmark measured. Neither must ever receive the true value.
+- The benchmark of a run is measured with noise, so the prices the network uses are wrong by a few percent, as they always are in reality.
 - The engine owns no rule of its own. It composes the price, the trust, the validation, the scheduling, and the ledger, exactly as a real network would.
 - Nothing outside this folder imports from it, apart from `index.ts`.
 

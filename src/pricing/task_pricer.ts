@@ -1,4 +1,7 @@
+import type { BenchmarkEnvironment } from '../types/benchmark_types.js';
 import type { TaskType, TaskTypeName } from '../types/task_types.js';
+import { RecalibrationCheck } from './recalibration_check.js';
+import type { ReferenceBenchmark } from './reference_benchmark.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
@@ -42,6 +45,39 @@ export class TaskPricer {
 		for (const taskType of taskPricerOptions.taskTypes) {
 			this._taskTypeByName.set(taskType.taskTypeName, taskType);
 		}
+	}
+
+	/**
+	 * Builds the prices from a reference benchmark, and refuses to build them when the benchmark was measured in
+	 * another environment.
+	 *
+	 * @param referenceBenchmark The benchmark holding the measured cost of every task type.
+	 * @param creditPerReferenceTask Number of credits paid for one reference task.
+	 * @param currentEnvironment The environment the network runs in now.
+	 * @returns The prices of every measured task type.
+	 * @throws When the environment changed since the benchmark was measured, because the measured ratios then
+	 *         describe a network that no longer exists.
+	 */
+	static fromReferenceBenchmark(
+		referenceBenchmark: ReferenceBenchmark,
+		creditPerReferenceTask: number,
+		currentEnvironment: BenchmarkEnvironment,
+	): TaskPricer {
+		const environmentDifferences = RecalibrationCheck.differencesBetween(
+			referenceBenchmark.environment(),
+			currentEnvironment,
+		);
+		if (environmentDifferences.length > 0) {
+			throw new Error(
+				'the benchmark has to be measured again before its prices are used, because '
+					+ RecalibrationCheck.describeDifferences(environmentDifferences),
+			);
+		}
+		return new TaskPricer({
+			taskTypes: referenceBenchmark.measuredTaskTypes(),
+			referenceTaskCostSeconds: referenceBenchmark.referenceTaskCostSeconds(),
+			creditPerReferenceTask: creditPerReferenceTask,
+		});
 	}
 
 	/**

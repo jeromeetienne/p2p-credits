@@ -1,4 +1,5 @@
 import { Ledger } from '../ledger/ledger.js';
+import { ReferenceBenchmark } from '../pricing/reference_benchmark.js';
 import { TaskPricer } from '../pricing/task_pricer.js';
 import { TaskScheduler } from '../scheduler/task_scheduler.js';
 import { ValidatorSelector } from '../scheduler/validator_selector.js';
@@ -13,7 +14,7 @@ import { ValidationSampler } from '../validation/validation_sampler.js';
 import { MetricsCollector } from './metrics_collector.js';
 import { RandomGenerator } from './random_generator.js';
 import { SimulationClock } from './simulation_clock.js';
-import type { SimulationParameters, SimulationReport } from './simulation_types.js';
+import type { SimulationParameters, SimulationReport, TaskTypePricingSummary } from './simulation_types.js';
 import { WorkerBehavior, type WorkerProfile } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -59,8 +60,17 @@ export class SimulationEngine {
 	/** Every simulated worker of the run, indexed by the identifier of its account. */
 	private _workerProfileByAccountId = new Map<AccountId, WorkerProfile>();
 
+	/** The cost of every task type, measured with the noise of the run. */
+	private _referenceBenchmark: ReferenceBenchmark;
+
 	/** The price of every task type. */
 	private _taskPricer: TaskPricer;
+
+	/** What each task type is paid, compared with what it is worth. */
+	private _taskTypePricingSummaries: TaskTypePricingSummary[];
+
+	/** The price every task type would be paid if the benchmark had measured the true cost. */
+	private _truePriceByTaskTypeName = new Map<TaskTypeName, number>();
 
 	/** The trust score of every account. */
 	private _trustScoreBook: TrustScoreBook;
@@ -90,11 +100,19 @@ export class SimulationEngine {
 
 		this._createWorkers();
 
-		this._taskPricer = new TaskPricer({
-			taskTypes: simulationParameters.taskTypes,
-			referenceTaskCostSeconds: simulationParameters.referenceTaskCostSeconds,
-			creditPerReferenceTask: simulationParameters.creditPerReferenceTask,
-		});
+		this._referenceBenchmark = this._measureReferenceBenchmark();
+		this._taskPricer = TaskPricer.fromReferenceBenchmark(
+			this._referenceBenchmark,
+			simulationParameters.creditPerReferenceTask,
+			simulationParameters.benchmarkEnvironment,
+		);
+		this._taskTypePricingSummaries = this._buildTaskTypePricingSummaries();
+		for (const taskTypePricingSummary of this._taskTypePricingSummaries) {
+			this._truePriceByTaskTypeName.set(
+				taskTypePricingSummary.taskTypeName,
+				taskTypePricingSummary.truePrice,
+			);
+		}
 		this._trustScoreBook = new TrustScoreBook({
 			initialTrust: simulationParameters.initialTrust,
 			increaseOnConfirmedResult: simulationParameters.trustIncreaseOnConfirmedResult,
@@ -114,8 +132,8 @@ export class SimulationEngine {
 			devices: this._devices,
 			randomNumberFn: this._randomNumberFn,
 		});
-		this._taskTypeNames = simulationParameters.taskTypes.map((taskType) => {
-			return taskType.taskTypeName;
+		this._taskTypeNames = simulationParameters.taskCosts.map((trueTaskCost) => {
+			return trueTaskCost.taskTypeName;
 		});
 	}
 
@@ -136,6 +154,7 @@ export class SimulationEngine {
 			this._ledger,
 			this._trustScoreBook,
 			this._workerProfiles,
+			this._taskTypePricingSummaries,
 		);
 	}
 
@@ -146,6 +165,81 @@ export class SimulationEngine {
 	 */
 	ledger(): Ledger {
 		return this._ledger;
+	}
+
+	/**
+	 * Returns the benchmark measured for the run, so that the measured costs can be read after the run.
+	 *
+	 * @returns The reference benchmark of the run.
+	 */
+	referenceBenchmark(): ReferenceBenchmark {
+		return this._referenceBenchmark;
+	}
+
+	///////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////
+	//	Measuring the price
+	///////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////
+
+	/**
+	 * Measures every task type on the reference machine, several times, with the measurement noise of the run.
+	 *
+	 * The noise is what makes the price imperfect. A real benchmark never measures the true cost, and section 10 of
+	 * the design note asks what a network does when its prices are wrong by a few percent.
+	 *
+	 * @returns The measured benchmark.
+	 */
+	private _measureReferenceBenchmark(): ReferenceBenchmark {
+		const referenceBenchmark = new ReferenceBenchmark({
+			environment: this._parameters.benchmarkEnvironment,
+			referenceTaskTypeName: this._parameters.referenceTaskTypeName,
+			minimumRunCount: this._parameters.benchmarkRunCount,
+		});
+
+		for (const trueTaskCost of this._parameters.taskCosts) {
+			for (let runIndex = 0; runIndex < this._parameters.benchmarkRunCount; runIndex += 1) {
+				const errorRatio = (this._randomNumberFn() * 2 - 1) * this._parameters.pricingErrorRatio;
+				referenceBenchmark.recordRun({
+					taskTypeName: trueTaskCost.taskTypeName,
+					referenceMachineName: 'reference machine',
+					durationSeconds: trueTaskCost.trueCostSeconds * (1 + errorRatio),
+				});
+			}
+		}
+
+		return referenceBenchmark;
+	}
+
+	/**
+	 * Compares what every task type is paid with what it is worth.
+	 *
+	 * @returns One summary per task type.
+	 * @throws When the reference task type has no true cost.
+	 */
+	private _buildTaskTypePricingSummaries(): TaskTypePricingSummary[] {
+		const trueReferenceTaskCost = this._parameters.taskCosts.find((trueTaskCost) => {
+			return trueTaskCost.taskTypeName === this._parameters.referenceTaskTypeName;
+		});
+		if (trueReferenceTaskCost === undefined) {
+			throw new Error(
+				`the reference task type "${this._parameters.referenceTaskTypeName}" has no true cost`,
+			);
+		}
+
+		return this._parameters.taskCosts.map((trueTaskCost) => {
+			const normalizedTrueCost = trueTaskCost.trueCostSeconds / trueReferenceTaskCost.trueCostSeconds;
+			const truePrice = normalizedTrueCost * this._parameters.creditPerReferenceTask;
+			const price = this._taskPricer.priceOf(trueTaskCost.taskTypeName);
+			return {
+				taskTypeName: trueTaskCost.taskTypeName,
+				trueCostSeconds: trueTaskCost.trueCostSeconds,
+				measuredCostSeconds: this._referenceBenchmark.measuredCostSecondsOf(trueTaskCost.taskTypeName),
+				price: price,
+				truePrice: truePrice,
+				profitabilityRatio: price / truePrice,
+			};
+		});
 	}
 
 	///////////////////////////////////////////////////////////////////////////////
@@ -409,6 +503,7 @@ export class SimulationEngine {
 	 * @param validationStatus The validation status of the paid result.
 	 * @param correctResultValue The value a correct execution of the task returns, known only to the simulation.
 	 * @returns Nothing.
+	 * @throws When the type of the task has no true price.
 	 */
 	private _payWorker(
 		task: Task,
@@ -426,6 +521,14 @@ export class SimulationEngine {
 			reason: 'the account executed a task',
 			validationStatus: validationStatus,
 		});
-		this._metricsCollector.recordPaidResult(taskResult.resultValue === correctResultValue, price);
+		const truePrice = this._truePriceByTaskTypeName.get(task.taskTypeName);
+		if (truePrice === undefined) {
+			throw new Error(`the task type "${task.taskTypeName}" has no true price`);
+		}
+		this._metricsCollector.recordPaidResult(
+			taskResult.resultValue === correctResultValue,
+			price,
+			truePrice,
+		);
 	}
 }
