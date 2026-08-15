@@ -1,4 +1,8 @@
+import { AccountRegistry } from '../identity/account_registry.js';
+import { SpendingPolicy } from '../identity/spending_policy.js';
+import { DeferredPaymentBook } from '../ledger/deferred_payment_book.js';
 import { Ledger } from '../ledger/ledger.js';
+import { SettlementPolicy } from '../ledger/settlement_policy.js';
 import { ReferenceBenchmark } from '../pricing/reference_benchmark.js';
 import { TaskPricer } from '../pricing/task_pricer.js';
 import { TaskScheduler } from '../scheduler/task_scheduler.js';
@@ -8,6 +12,7 @@ import { TrustPolicy } from '../trust/trust_policy.js';
 import { TrustScoreBook } from '../trust/trust_score.js';
 import type { Account, AccountId } from '../types/account_types.js';
 import type { Device, DeviceId } from '../types/device_types.js';
+import type { LedgerEntryDraft } from '../types/ledger_types.js';
 import type { RandomNumberFn } from '../types/random_types.js';
 import type { Task, TaskAssignment, TaskResult, TaskTypeName, ValidationStatus } from '../types/task_types.js';
 import { DisagreementResolver, type MajorityOutcome } from '../validation/disagreement_resolver.js';
@@ -59,6 +64,18 @@ export class SimulationEngine {
 
 	/** The append-only ledger of the run. */
 	private _ledger = new Ledger();
+
+	/** When a payment is recorded and when it can be spent. */
+	private _settlementPolicy: SettlementPolicy;
+
+	/** The payments that are not recorded yet. */
+	private _deferredPaymentBook = new DeferredPaymentBook();
+
+	/** How far an account may go before it has to contribute. */
+	private _spendingPolicy: SpendingPolicy;
+
+	/** The accounts of the run, and what opening them cost. */
+	private _accountRegistry: AccountRegistry;
 
 	/** The counters of the run. */
 	private _metricsCollector = new MetricsCollector();
@@ -117,6 +134,15 @@ export class SimulationEngine {
 	/** Number given to the next task, used to build the identifier of that task. */
 	private _nextTaskNumber = 1;
 
+	/** The accounts a Sybil attacker abandoned, which receive no further task and request none. */
+	private _abandonedAccountIds = new Set<AccountId>();
+
+	/** Every account a Sybil attacker ever held, used to measure what the attack earned. */
+	private _sybilAccountIds: AccountId[] = [];
+
+	/** Number given to the next account a Sybil attacker opens. */
+	private _nextSybilAccountNumber = 0;
+
 	/**
 	 * @param simulationParameters Everything the run needs.
 	 */
@@ -124,6 +150,21 @@ export class SimulationEngine {
 		this._parameters = simulationParameters;
 		this._randomGenerator = new RandomGenerator(simulationParameters.randomSeed);
 		this._randomNumberFn = this._randomGenerator.asRandomNumberFn();
+
+		this._settlementPolicy = new SettlementPolicy({
+			policyName: simulationParameters.settlementPolicyName,
+			provisionalTickCount: simulationParameters.provisionalTickCount,
+			settlementPeriodTickCount: simulationParameters.settlementPeriodTickCount,
+		});
+		this._spendingPolicy = new SpendingPolicy({
+			allowedInitialDeficit: simulationParameters.allowedInitialDeficit,
+			allowedDeficitAfterContribution: simulationParameters.allowedDeficitAfterContribution,
+			requiredContribution: simulationParameters.requiredContribution,
+		});
+		this._accountRegistry = new AccountRegistry({
+			identityCost: simulationParameters.identityCost,
+			identityProofName: simulationParameters.identityProofName,
+		});
 
 		this._createWorkers();
 
@@ -173,6 +214,9 @@ export class SimulationEngine {
 		});
 
 		const isDeviceEligibleFn = (device: Device): boolean => {
+			if (this._abandonedAccountIds.has(device.accountId) === true) {
+				return false;
+			}
 			return this._suspensionBook.isSuspended(device.accountId, this._simulationClock.currentTick()) === false;
 		};
 		this._taskScheduler = new TaskScheduler({
@@ -204,20 +248,25 @@ export class SimulationEngine {
 			if (this._parameters.secondDeviceTick === tickIndex) {
 				this._addSecondDeviceToEveryWorker();
 			}
+			this._recordDuePayments();
+			this._replaceAbandonedSybilAccounts();
 			for (let taskIndex = 0; taskIndex < this._parameters.tasksPerTick; taskIndex += 1) {
 				this._runOneTask();
 			}
 			this._simulationClock.advance();
 		}
-		return this._metricsCollector.buildReport(
-			this._parameters.tickCount,
-			this._ledger,
-			this._trustScoreBook,
-			this._suspensionBook,
-			this._workerProfiles,
-			this._taskTypePricingSummaries,
-			this._buildDeviceSummaries(),
-		);
+		return this._metricsCollector.buildReport({
+			tickCount: this._parameters.tickCount,
+			ledger: this._ledger,
+			trustScoreBook: this._trustScoreBook,
+			suspensionBook: this._suspensionBook,
+			accountRegistry: this._accountRegistry,
+			deferredPaymentBook: this._deferredPaymentBook,
+			workerProfiles: this._workerProfiles,
+			taskTypePricingSummaries: this._taskTypePricingSummaries,
+			deviceSummaries: this._buildDeviceSummaries(),
+			sybilAttackerProfit: this._sybilAttackerProfit(),
+		});
 	}
 
 	/**
@@ -323,6 +372,7 @@ export class SimulationEngine {
 			this._parameters.unstableErrorProbability,
 		);
 		this._createWorkerGroup('malicious', this._parameters.maliciousWorkerCount, 0);
+		this._createWorkerGroup('sybil attacker', this._parameters.sybilAttackerCount, 0);
 	}
 
 	/**
@@ -358,11 +408,7 @@ export class SimulationEngine {
 			const deviceId = `${behaviorName}-device-${workerIndex + 1}`;
 			const hardwareProfile = this._randomGenerator.pick(hardwareProfiles);
 
-			const account: Account = {
-				accountId: accountId,
-				createdAtTick: 0,
-				identityProofName: 'none',
-			};
+			const account = this._accountRegistry.createAccount(accountId, 0);
 			const device: Device = {
 				deviceId: deviceId,
 				accountId: accountId,
@@ -381,7 +427,94 @@ export class SimulationEngine {
 			this._addedAtTickByDeviceId.set(deviceId, 0);
 			this._workerProfiles.push(workerProfile);
 			this._workerProfileByAccountId.set(accountId, workerProfile);
+
+			if (behaviorName === 'sybil attacker') {
+				this._sybilAccountIds.push(accountId);
+				this._nextSybilAccountNumber = workerIndex + 1;
+			}
 		}
+	}
+
+	/**
+	 * Records the payments a settlement policy held back until now.
+	 *
+	 * @returns Nothing.
+	 */
+	private _recordDuePayments(): void {
+		const dueDrafts = this._deferredPaymentBook.releaseDue(this._simulationClock.currentTick());
+		for (const ledgerEntryDraft of dueDrafts) {
+			this._ledger.append(ledgerEntryDraft);
+		}
+	}
+
+	/**
+	 * Lets every Sybil attacker whose account is no longer worth anything abandon it and open a fresh one.
+	 *
+	 * The abandoned account keeps its balance and its history, and receives no further task. What the attacker gains
+	 * by starting again is a trust score of a newcomer; what it loses is the price of one more identity.
+	 *
+	 * @returns Nothing.
+	 */
+	private _replaceAbandonedSybilAccounts(): void {
+		const tick = this._simulationClock.currentTick();
+
+		for (let workerIndex = 0; workerIndex < this._workerProfiles.length; workerIndex += 1) {
+			const workerProfile = this._workerProfiles[workerIndex];
+			if (workerProfile === undefined || workerProfile.behaviorName !== 'sybil attacker') {
+				continue;
+			}
+			if (this._trustScoreBook.accountTrustOf(workerProfile.accountId) > this._parameters.sybilAbandonTrust) {
+				continue;
+			}
+
+			this._abandonedAccountIds.add(workerProfile.accountId);
+			this._metricsCollector.recordAbandonedAccount();
+
+			this._nextSybilAccountNumber += 1;
+			const accountId = `sybil attacker-account-${this._nextSybilAccountNumber}`;
+			const deviceId = `sybil attacker-device-${this._nextSybilAccountNumber}`;
+			this._accountRegistry.createAccount(accountId, tick);
+			this._sybilAccountIds.push(accountId);
+
+			this._accounts.push({
+				accountId: accountId,
+				createdAtTick: tick,
+				identityProofName: this._parameters.identityProofName,
+			});
+			this._devices.push({
+				deviceId: deviceId,
+				accountId: accountId,
+				hardwareProfileName: 'unknown machine',
+				speedFactor: 1,
+			});
+			this._addedAtTickByDeviceId.set(deviceId, tick);
+
+			const freshProfile: WorkerProfile = {
+				accountId: accountId,
+				deviceId: deviceId,
+				behaviorName: 'sybil attacker',
+				errorProbability: workerProfile.errorProbability,
+			};
+			this._workerProfiles[workerIndex] = freshProfile;
+			this._workerProfileByAccountId.set(accountId, freshProfile);
+		}
+	}
+
+	/**
+	 * Adds up what every Sybil attacker was paid, takes off what was taken back from it, and takes off what opening
+	 * its accounts cost.
+	 *
+	 * What the attacker then chose to spend those credits on is not counted, because spending them is the point of
+	 * stealing them, not a loss.
+	 *
+	 * @returns The profit of the attack, in credits. A number at or below zero means it did not pay for itself.
+	 */
+	private _sybilAttackerProfit(): number {
+		let keptCredits = 0;
+		for (const accountId of this._sybilAccountIds) {
+			keptCredits += this._ledger.earnedTotalOf(accountId) + this._ledger.adjustmentTotalOf(accountId);
+		}
+		return keptCredits - this._sybilAccountIds.length * this._accountRegistry.identityCost();
 	}
 
 	/**
@@ -445,7 +578,7 @@ export class SimulationEngine {
 	 */
 	private _runOneTask(): void {
 		const tick = this._simulationClock.currentTick();
-		const requesterAccount = this._randomGenerator.pick(this._accounts);
+		const requesterAccount = this._randomGenerator.pick(this._requesterAccounts());
 		const taskTypeName = this._randomGenerator.pick(this._taskTypeNames);
 		const task: Task = {
 			taskId: `task-${this._nextTaskNumber}`,
@@ -455,19 +588,31 @@ export class SimulationEngine {
 		};
 		this._nextTaskNumber += 1;
 
+		const price = this._taskPricer.priceOf(taskTypeName);
+		const spendableBalance = this._ledger.spendableBalanceOf(requesterAccount.accountId, tick);
+		const earnedTotal = this._ledger.earnedTotalOf(requesterAccount.accountId);
+		if (this._spendingPolicy.mayConsume(spendableBalance, earnedTotal, price) === false) {
+			const requesterProfile = this._workerProfileByAccountId.get(requesterAccount.accountId);
+			if (requesterProfile === undefined) {
+				throw new Error(`the account "${requesterAccount.accountId}" has no simulated worker`);
+			}
+			this._metricsCollector.recordRefusedTask(requesterProfile.behaviorName);
+			return;
+		}
+
 		const primaryAssignment = this._taskScheduler.assign(task);
 		if (primaryAssignment === undefined) {
 			this._metricsCollector.recordUnassignedTask();
 			return;
 		}
 
-		const price = this._taskPricer.priceOf(taskTypeName);
 		this._ledger.append({
 			tick: tick,
 			accountId: requesterAccount.accountId,
 			taskId: task.taskId,
 			entryType: 'debit',
 			amount: price,
+			spendableFromTick: tick,
 			reason: 'the account requested a task',
 			validationStatus: 'unverified',
 		});
@@ -510,6 +655,17 @@ export class SimulationEngine {
 		}
 
 		this._resolveDisagreement(task, [primaryResult, validatorResult], price, trueVector);
+	}
+
+	/**
+	 * Returns the accounts that still ask the network for work.
+	 *
+	 * @returns Every account except the ones a Sybil attacker abandoned.
+	 */
+	private _requesterAccounts(): Account[] {
+		return this._accounts.filter((account) => {
+			return this._abandonedAccountIds.has(account.accountId) === false;
+		});
 	}
 
 	/**
@@ -699,6 +855,7 @@ export class SimulationEngine {
 			taskId: taskResult.taskId,
 			entryType: 'adjustment',
 			amount: -amountToTakeBack,
+			spendableFromTick: this._simulationClock.currentTick(),
 			reason: 'the account returned a wrong result, so the credits paid for its unverified results were taken back',
 			validationStatus: 'rejected',
 		});
@@ -736,15 +893,23 @@ export class SimulationEngine {
 		price: number,
 		validationStatus: ValidationStatus,
 	): void {
-		this._ledger.append({
-			tick: this._simulationClock.currentTick(),
+		const currentTick = this._simulationClock.currentTick();
+		const settlementDecision = this._settlementPolicy.decideForPayment(currentTick);
+		const ledgerEntryDraft: LedgerEntryDraft = {
+			tick: settlementDecision.recordAtTick,
 			accountId: simulatedResult.taskResult.accountId,
 			taskId: task.taskId,
 			entryType: 'credit',
 			amount: price,
+			spendableFromTick: settlementDecision.spendableFromTick,
 			reason: 'the account executed a task',
 			validationStatus: validationStatus,
-		});
+		};
+		if (settlementDecision.recordAtTick > currentTick) {
+			this._deferredPaymentBook.hold(ledgerEntryDraft);
+		} else {
+			this._ledger.append(ledgerEntryDraft);
+		}
 		const truePrice = this._truePriceByTaskTypeName.get(task.taskTypeName);
 		if (truePrice === undefined) {
 			throw new Error(`the task type "${task.taskTypeName}" has no true price`);

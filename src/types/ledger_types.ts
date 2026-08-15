@@ -40,6 +40,11 @@ export const LedgerEntryDraftSchema = Zod.object({
 	 * direction. The amount of an adjustment is signed, because an adjustment can add or remove credits.
 	 */
 	amount: Zod.number(),
+	/**
+	 * Tick from which the amount of the movement can be spent. A movement recorded and spendable at once carries the
+	 * tick it was recorded at; a movement held back for a while carries a later tick.
+	 */
+	spendableFromTick: Zod.number().int().nonnegative(),
 	/** Short sentence saying why the movement was recorded. */
 	reason: Zod.string(),
 	/** Validation status of the result the movement pays for. */

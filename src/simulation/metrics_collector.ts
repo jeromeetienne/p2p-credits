@@ -1,3 +1,5 @@
+import type { AccountRegistry } from '../identity/account_registry.js';
+import type { DeferredPaymentBook } from '../ledger/deferred_payment_book.js';
 import type { Ledger } from '../ledger/ledger.js';
 import type { SuspensionBook } from '../trust/suspension_book.js';
 import type { TrustScoreBook } from '../trust/trust_score.js';
@@ -11,13 +13,37 @@ import type {
 	TaskTypeValidationSummary,
 	WorkerSummary,
 } from './simulation_types.js';
-import type { WorkerProfile } from './worker_behavior.js';
+import type { WorkerBehaviorName, WorkerProfile } from './worker_behavior.js';
 
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 //	MetricsCollector — counts what happened during a run and builds the report
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
+
+/** Everything the report of a run is read from, once the run is over. */
+export type ReportInputs = {
+	/** Number of ticks the run lasted. */
+	tickCount: number;
+	/** The ledger of the run, read to obtain the balances and the totals. */
+	ledger: Ledger;
+	/** The trust scores of the run. */
+	trustScoreBook: TrustScoreBook;
+	/** The suspensions pronounced during the run. */
+	suspensionBook: SuspensionBook;
+	/** The accounts opened during the run, and what opening them cost. */
+	accountRegistry: AccountRegistry;
+	/** The payments still waiting to be recorded at the end of the run. */
+	deferredPaymentBook: DeferredPaymentBook;
+	/** Every simulated worker of the run. */
+	workerProfiles: WorkerProfile[];
+	/** What each task type was paid, compared with what it was worth. */
+	taskTypePricingSummaries: TaskTypePricingSummary[];
+	/** What each device earned in trust, and when it joined the network. */
+	deviceSummaries: DeviceSummary[];
+	/** What every Sybil attacker kept, less what opening its accounts cost, in credits. */
+	sybilAttackerProfit: number;
+};
 
 /**
  * The counters of one run.
@@ -62,6 +88,15 @@ export class MetricsCollector {
 
 	/** Amount of credits created only because the benchmark did not measure the true cost. */
 	private _creditsCreatedByPricingError = 0;
+
+	/** Number of tasks the network refused, because the account asking had not contributed enough. */
+	private _refusedTaskCount = 0;
+
+	/** Number of tasks refused to each kind of worker, indexed by the name of the behaviour. */
+	private _refusedTaskCountByBehaviorName = new Map<WorkerBehaviorName, number>();
+
+	/** Number of accounts a Sybil attacker abandoned. */
+	private _abandonedAccountCount = 0;
 
 	/** Tick at which each account first reached the trusted threshold. */
 	private _firstTrustedTickByAccountId = new Map<AccountId, number>();
@@ -178,6 +213,27 @@ export class MetricsCollector {
 	}
 
 	/**
+	 * Records that the network refused a task, because the account asking for it had not contributed enough.
+	 *
+	 * @param behaviorName The behaviour of the worker that was refused.
+	 * @returns Nothing.
+	 */
+	recordRefusedTask(behaviorName: WorkerBehaviorName): void {
+		this._refusedTaskCount += 1;
+		const previousCount = this._refusedTaskCountByBehaviorName.get(behaviorName) ?? 0;
+		this._refusedTaskCountByBehaviorName.set(behaviorName, previousCount + 1);
+	}
+
+	/**
+	 * Records that a Sybil attacker abandoned an account the network had stopped trusting.
+	 *
+	 * @returns Nothing.
+	 */
+	recordAbandonedAccount(): void {
+		this._abandonedAccountCount += 1;
+	}
+
+	/**
 	 * Records the tick at which one account reached the trusted threshold, and keeps only the first one.
 	 *
 	 * @param accountId Identifier of the account.
@@ -194,25 +250,15 @@ export class MetricsCollector {
 	/**
 	 * Builds the report of the run.
 	 *
-	 * @param tickCount Number of ticks the run lasted.
-	 * @param ledger The ledger of the run, read to obtain the balances and the totals.
-	 * @param trustScoreBook The trust scores of the run.
-	 * @param suspensionBook The suspensions pronounced during the run.
-	 * @param workerProfiles Every simulated worker of the run.
-	 * @param taskTypePricingSummaries What each task type was paid, compared with what it was worth.
-	 * @param deviceSummaries What each device earned in trust, and when it joined the network.
+	 * @param reportInputs Everything the report is read from at the end of the run.
 	 * @returns The report of the run.
 	 */
-	buildReport(
-		tickCount: number,
-		ledger: Ledger,
-		trustScoreBook: TrustScoreBook,
-		suspensionBook: SuspensionBook,
-		workerProfiles: WorkerProfile[],
-		taskTypePricingSummaries: TaskTypePricingSummary[],
-		deviceSummaries: DeviceSummary[],
-	): SimulationReport {
-		const workerSummaries: WorkerSummary[] = workerProfiles.map((workerProfile) => {
+	buildReport(reportInputs: ReportInputs): SimulationReport {
+		const ledger = reportInputs.ledger;
+		const trustScoreBook = reportInputs.trustScoreBook;
+		const taskTypePricingSummaries = reportInputs.taskTypePricingSummaries;
+
+		const workerSummaries: WorkerSummary[] = reportInputs.workerProfiles.map((workerProfile) => {
 			return {
 				accountId: workerProfile.accountId,
 				behaviorName: workerProfile.behaviorName,
@@ -232,7 +278,7 @@ export class MetricsCollector {
 		}
 
 		return {
-			tickCount: tickCount,
+			tickCount: reportInputs.tickCount,
 			taskCount: this._taskCount,
 			executionCount: this._executionCount,
 			validationCopyExecutionCount: this._validationCopyExecutionCount,
@@ -244,15 +290,27 @@ export class MetricsCollector {
 			correctResultRejectedCount: this._correctResultRejectedCount,
 			unresolvedTaskCount: this._unresolvedTaskCount,
 			unassignedTaskCount: this._unassignedTaskCount,
-			suspensionCount: suspensionBook.suspensionCount(),
+			suspensionCount: reportInputs.suspensionBook.suspensionCount(),
 			confiscatedCredits: this._confiscatedCredits,
+			refusedTaskCount: this._refusedTaskCount,
+			refusedTaskCounts: Array.from(this._refusedTaskCountByBehaviorName.entries()).map((entry) => {
+				return {
+					behaviorName: entry[0],
+					refusedTaskCount: entry[1],
+				};
+			}),
+			createdAccountCount: reportInputs.accountRegistry.createdAccountCount(),
+			totalIdentityCost: reportInputs.accountRegistry.totalIdentityCost(),
+			abandonedAccountCount: this._abandonedAccountCount,
+			sybilAttackerProfit: reportInputs.sybilAttackerProfit,
+			unsettledCredits: reportInputs.deferredPaymentBook.heldTotal(),
 			totalCreditsCreated: ledger.totalCreditsCreated(),
 			totalCreditsConsumed: ledger.totalCreditsConsumed(),
 			creditsCreatedByPricingError: this._creditsCreatedByPricingError,
 			pricingArbitrageRatio: MetricsCollector._arbitrageRatioOf(taskTypePricingSummaries),
 			taskTypePricingSummaries: taskTypePricingSummaries,
 			workerSummaries: workerSummaries,
-			deviceSummaries: deviceSummaries,
+			deviceSummaries: reportInputs.deviceSummaries,
 			taskTypeValidationSummaries: Array.from(this._validationCountersByTaskTypeName.values()),
 		};
 	}

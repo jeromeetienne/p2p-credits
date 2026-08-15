@@ -43,6 +43,18 @@ export type { RandomNumberFn } from './types/random_types.js';
 export type { WorkerTrustFn } from './types/trust_types.js';
 
 export { Ledger } from './ledger/ledger.js';
+export { DeferredPaymentBook } from './ledger/deferred_payment_book.js';
+export { SettlementPolicy, SettlementPolicyNameSchema } from './ledger/settlement_policy.js';
+export type {
+	SettlementDecision,
+	SettlementPolicyName,
+	SettlementPolicyOptions,
+} from './ledger/settlement_policy.js';
+
+export { AccountRegistry } from './identity/account_registry.js';
+export type { AccountRegistryOptions } from './identity/account_registry.js';
+export { SpendingPolicy } from './identity/spending_policy.js';
+export type { SpendingDecision, SpendingPolicyOptions } from './identity/spending_policy.js';
 
 export { TaskPricer } from './pricing/task_pricer.js';
 export type { TaskPricerOptions } from './pricing/task_pricer.js';
@@ -79,11 +91,13 @@ export { ValidatorSelector } from './scheduler/validator_selector.js';
 export type { ValidatorSelectorOptions } from './scheduler/validator_selector.js';
 
 export { MetricsCollector } from './simulation/metrics_collector.js';
+export type { ReportInputs } from './simulation/metrics_collector.js';
 export { RandomGenerator } from './simulation/random_generator.js';
 export { SimulationClock } from './simulation/simulation_clock.js';
 export { SimulationEngine } from './simulation/simulation_engine.js';
 export type {
 	DeviceSummary,
+	RefusedTaskCount,
 	SimulationParameters,
 	SimulationReport,
 	TaskTypeComparisonStrategy,

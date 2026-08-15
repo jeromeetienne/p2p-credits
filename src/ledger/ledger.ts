@@ -67,22 +67,45 @@ export class Ledger {
 	}
 
 	/**
-	 * Returns the part of the balance of an account that the account is allowed to spend.
+	 * Returns the part of the balance of an account that the account is allowed to spend right now.
 	 *
-	 * A credit that waits for a validation is not spendable. A debit always counts, so an account can never hide a
-	 * debt behind a pending credit.
+	 * A credit that waits for a validation is not spendable, and neither is a credit whose tick has not come yet. A
+	 * debit always counts, so an account can never hide a debt behind a credit it cannot spend.
 	 *
 	 * @param accountId Identifier of the account.
+	 * @param currentTick The current tick.
 	 * @returns The spendable balance in credits, which can be negative.
 	 */
-	spendableBalanceOf(accountId: AccountId): number {
+	spendableBalanceOf(accountId: AccountId, currentTick: number): number {
 		const spendableEntries = this.entriesOf(accountId).filter((ledgerEntry) => {
-			if (ledgerEntry.entryType === 'credit' && ledgerEntry.validationStatus === 'pending') {
+			if (ledgerEntry.entryType !== 'credit') {
+				return true;
+			}
+			if (ledgerEntry.validationStatus === 'pending') {
 				return false;
 			}
-			return true;
+			return ledgerEntry.spendableFromTick <= currentTick;
 		});
 		return this._sumOf(spendableEntries);
+	}
+
+	/**
+	 * Returns everything an account was ever paid for the work it performed, whether or not it can be spent yet.
+	 *
+	 * This is what an account contributed to the network, and it is the number a rule about contributing before
+	 * consuming reads.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @returns The amount earned, in credits.
+	 */
+	earnedTotalOf(accountId: AccountId): number {
+		let total = 0;
+		for (const ledgerEntry of this.entriesOf(accountId)) {
+			if (ledgerEntry.entryType === 'credit') {
+				total += ledgerEntry.amount;
+			}
+		}
+		return total;
 	}
 
 	/**

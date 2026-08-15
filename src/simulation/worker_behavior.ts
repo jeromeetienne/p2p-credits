@@ -15,6 +15,7 @@ export const WorkerBehaviorNameSchema = Zod.enum([
 	'honest',
 	'unstable',
 	'malicious',
+	'sybil attacker',
 ]);
 
 /**
@@ -25,6 +26,8 @@ export const WorkerBehaviorNameSchema = Zod.enum([
  *   runtime, a crash, or a numerical problem. The worker does not try to cheat.
  * - `malicious`: never performs the computation and returns a value of the right shape and of the wrong content, to
  *   be paid for work it did not do.
+ * - `sybil attacker`: behaves exactly like a malicious worker, and abandons its account for a freshly created one as
+ *   soon as the network has lowered its trust far enough to make it unprofitable.
  */
 export type WorkerBehaviorName = Zod.infer<typeof WorkerBehaviorNameSchema>;
 
@@ -80,7 +83,7 @@ export class WorkerBehavior {
 		noiseRatio: number,
 		randomNumberFn: RandomNumberFn,
 	): ProducedResult {
-		if (workerProfile.behaviorName === 'malicious') {
+		if (workerProfile.behaviorName === 'malicious' || workerProfile.behaviorName === 'sybil attacker') {
 			const fabricatedVector = trueVector.map((trueNumber) => {
 				return trueNumber * (0.5 + randomNumberFn());
 			});

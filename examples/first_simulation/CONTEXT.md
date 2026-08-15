@@ -1,11 +1,11 @@
 # Directory Context: `/examples/first_simulation`
 
 ## Purpose
-The first scenario run over the library: twenty honest workers, four unstable workers, two malicious workers, and one task out of ten duplicated for validation.
+The first scenario run over the library: twenty honest workers, four unstable workers, two malicious workers, and two Sybil attackers, each verified as often as its trust deserves.
 
 ## Key Exports & Entry Points
 - `main.ts`: composes the library, runs the scenario, and prints the report.
-- `simulation_parameters.ts`: the values of this scenario, and nothing else. `exactComparisonParameters` repeats the same scenario with one single change, so that the price of comparing character for character can be read beside the price of comparing properly.
+- `simulation_parameters.ts`: the values of this scenario, and nothing else. `exactComparisonParameters` repeats the same scenario with one single change, so that the price of comparing character for character can be read beside the price of comparing properly, and `settlementComparisonParameters` repeats it once per settlement policy.
 - `report_printer.ts`: writes the measured metrics on the terminal.
 - Command to run this folder: `npm run example:first_simulation`
 

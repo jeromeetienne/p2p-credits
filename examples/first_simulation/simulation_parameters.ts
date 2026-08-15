@@ -28,6 +28,11 @@ import type { SimulationParameters } from '../../src/index.js';
  * thousandth, because no two executions of an inference are identical. Each task type is compared in its own way, so
  * that the three comparisons can be watched side by side in one run: the reference task by a numerical tolerance,
  * task A by a canonical form kept to two decimals, and task B by the angle between the two vectors.
+ *
+ * A worker is paid at once and waits ten ticks before it can spend, an account that has earned nothing may go one
+ * credit into debt and no further, and opening an account costs five credits. Two Sybil attackers abandon their
+ * account for a fresh one every time the network has lowered its trust to minus ten, so that the cost of an identity
+ * can be compared with what the attack brings in.
  */
 export const firstSimulationParameters: SimulationParameters = {
 	randomSeed: 20260815,
@@ -82,6 +87,16 @@ export const firstSimulationParameters: SimulationParameters = {
 	unstableWorkerCount: 4,
 	unstableErrorProbability: 0.05,
 	maliciousWorkerCount: 2,
+	sybilAttackerCount: 2,
+	sybilAbandonTrust: -10,
+	settlementPolicyName: 'provisional credit',
+	provisionalTickCount: 10,
+	settlementPeriodTickCount: 20,
+	allowedInitialDeficit: 1,
+	allowedDeficitAfterContribution: 5,
+	requiredContribution: 10,
+	identityCost: 5,
+	identityProofName: 'verified electronic mail address',
 	taskCosts: [
 		{
 			taskTypeName: 'reference task',
@@ -118,6 +133,27 @@ export const firstSimulationParameters: SimulationParameters = {
 	maximumTrust: 100,
 	trustedThreshold: 10,
 };
+
+/**
+ * The same scenario under each of the three settlement policies of section 6 of the design note.
+ *
+ * Nothing else moves, so the three reports say what the network pays for choosing when a worker may spend what it
+ * earned.
+ */
+export const settlementComparisonParameters: SimulationParameters[] = [
+	{
+		...firstSimulationParameters,
+		settlementPolicyName: 'immediate credit',
+	},
+	{
+		...firstSimulationParameters,
+		settlementPolicyName: 'provisional credit',
+	},
+	{
+		...firstSimulationParameters,
+		settlementPolicyName: 'delayed settlement',
+	},
+];
 
 /**
  * The same scenario, with one single change: every task type is compared character for character.

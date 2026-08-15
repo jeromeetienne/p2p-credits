@@ -1,6 +1,7 @@
 import type { AccountId } from '../types/account_types.js';
 import type { BenchmarkEnvironment } from '../types/benchmark_types.js';
 import type { DeviceId } from '../types/device_types.js';
+import type { SettlementPolicyName } from '../ledger/settlement_policy.js';
 import type { PenaltyPolicyName } from '../trust/trust_policy.js';
 import type { TaskTypeName } from '../types/task_types.js';
 import type { ResolutionMethodName } from '../validation/disagreement_resolver.js';
@@ -82,6 +83,26 @@ export type SimulationParameters = {
 	unstableErrorProbability: number;
 	/** Number of malicious workers. */
 	maliciousWorkerCount: number;
+	/** Number of Sybil attackers, each of which abandons its account for a new one once it is caught enough. */
+	sybilAttackerCount: number;
+	/** Trust at or below which a Sybil attacker abandons its account and opens a freshly created one. */
+	sybilAbandonTrust: number;
+	/** The way a payment is recorded and made spendable. */
+	settlementPolicyName: SettlementPolicyName;
+	/** Number of ticks a payment stays unspendable under the `provisional credit` policy. */
+	provisionalTickCount: number;
+	/** Number of ticks between two settlements under the `delayed settlement` policy. */
+	settlementPeriodTickCount: number;
+	/** How far below zero an account that has not contributed enough yet may go, in credits. */
+	allowedInitialDeficit: number;
+	/** How far below zero an account that has contributed enough may go, in credits. */
+	allowedDeficitAfterContribution: number;
+	/** Amount an account has to have earned before the larger deficit is opened to it, in credits. */
+	requiredContribution: number;
+	/** What creating one account costs whoever creates it, written in credits. */
+	identityCost: number;
+	/** Name of the proof the network asks for before it opens an account. */
+	identityProofName: string;
 	/** Every task type the network knows, with the cost each one truly takes on the reference machine. */
 	taskCosts: TrueTaskCost[];
 	/** Name of the task type used as the reference, against which every other task type is compared. */
@@ -187,6 +208,14 @@ export type TaskTypeValidationSummary = {
 	genuineResultRejectedCount: number;
 };
 
+/** How often one kind of worker was refused a task for lack of credits. */
+export type RefusedTaskCount = {
+	/** The behaviour of the workers that were refused. */
+	behaviorName: WorkerBehaviorName;
+	/** Number of tasks refused to workers of that behaviour. */
+	refusedTaskCount: number;
+};
+
 /** What one device earned in trust, and when it joined the network. */
 export type DeviceSummary = {
 	/** Identifier of the device. */
@@ -240,6 +269,23 @@ export type SimulationReport = {
 	suspensionCount: number;
 	/** Amount of credits taken back from workers caught returning a wrong result, in credits. */
 	confiscatedCredits: number;
+	/** Number of tasks the network refused, because the account asking for them had not contributed enough. */
+	refusedTaskCount: number;
+	/** How many of those refusals each kind of worker met. */
+	refusedTaskCounts: RefusedTaskCount[];
+	/** Number of accounts ever opened, including the ones a Sybil attacker opened after abandoning another. */
+	createdAccountCount: number;
+	/** What opening every account cost, taken together, in credits. */
+	totalIdentityCost: number;
+	/** Number of accounts a Sybil attacker abandoned after the network stopped trusting them. */
+	abandonedAccountCount: number;
+	/**
+	 * What every Sybil attacker kept, taken together: the credits its accounts hold at the end of the run, less what
+	 * opening those accounts cost. A number at or below zero means the attack did not pay for itself.
+	 */
+	sybilAttackerProfit: number;
+	/** Amount of credits still waiting to be recorded at the end of the run, in credits. */
+	unsettledCredits: number;
 	/** Total amount of credits created by the network during the run. */
 	totalCreditsCreated: number;
 	/** Total amount of credits consumed by the users of the network during the run. */

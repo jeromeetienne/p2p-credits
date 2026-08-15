@@ -40,6 +40,14 @@ type DeviceGroupSummary = {
 	averageCombinedTrust: number;
 };
 
+/** One report, under the name of what its run changed. */
+export type NamedReport = {
+	/** What this run changed, for example the name of the settlement policy it used. */
+	runName: string;
+	/** The report of that run. */
+	simulationReport: SimulationReport;
+};
+
 /** The printed form of the report of one run. */
 export class ReportPrinter {
 	/**
@@ -79,10 +87,28 @@ export class ReportPrinter {
 		);
 		console.log('');
 
+		console.log('--- identity ---');
+		console.log(`accounts opened                  ${simulationReport.createdAccountCount}`);
+		console.log(`accounts abandoned               ${simulationReport.abandonedAccountCount}`);
+		console.log(
+			`cost of opening them             ${ReportPrinter._formatCredits(simulationReport.totalIdentityCost)}`,
+		);
+		console.log(
+			`what the Sybil attackers kept    ${ReportPrinter._formatCredits(simulationReport.sybilAttackerProfit)}`,
+		);
+		console.log(`tasks refused for lack of credit ${simulationReport.refusedTaskCount}`);
+		for (const refusedTaskCount of simulationReport.refusedTaskCounts) {
+			const behaviorName = `  of which ${refusedTaskCount.behaviorName}`.padEnd(33, ' ');
+			console.log(`${behaviorName}${refusedTaskCount.refusedTaskCount}`);
+		}
+		console.log('');
+
 		console.log('--- economics ---');
 		console.log(`credits created                  ${ReportPrinter._formatCredits(simulationReport.totalCreditsCreated)}`);
 		const creditsConsumed = ReportPrinter._formatCredits(simulationReport.totalCreditsConsumed);
 		console.log(`credits consumed                 ${creditsConsumed}`);
+		const unsettledCredits = ReportPrinter._formatCredits(simulationReport.unsettledCredits);
+		console.log(`credits not settled yet          ${unsettledCredits}`);
 		console.log('');
 
 		console.log('--- price ---');
@@ -208,6 +234,51 @@ export class ReportPrinter {
 		const creditsCreated = ReportPrinter._formatCredits(simulationReport.totalCreditsCreated);
 		console.log(`credits created                   ${creditsCreated}`);
 		console.log('');
+	}
+
+	/**
+	 * Writes one line per run, so that several runs of the same scenario can be read side by side.
+	 *
+	 * @param headingName The heading written above the table.
+	 * @param columnName The name of what changed between the runs.
+	 * @param namedReports The reports, each under the name of what it changed.
+	 * @returns Nothing.
+	 */
+	static printSideBySide(headingName: string, columnName: string, namedReports: NamedReport[]): void {
+		console.log(`--- ${headingName} ---`);
+		console.log(
+			ReportPrinter._formatSideBySideRow([
+				columnName,
+				'tasks run',
+				'credits created',
+				'not settled',
+				'wrong paid for',
+				'refused',
+			]),
+		);
+		for (const namedReport of namedReports) {
+			console.log(
+				ReportPrinter._formatSideBySideRow([
+					namedReport.runName,
+					String(namedReport.simulationReport.taskCount),
+					namedReport.simulationReport.totalCreditsCreated.toFixed(2),
+					namedReport.simulationReport.unsettledCredits.toFixed(2),
+					String(namedReport.simulationReport.wrongResultUndetectedCount),
+					String(namedReport.simulationReport.refusedTaskCount),
+				]),
+			);
+		}
+		console.log('');
+	}
+
+	/**
+	 * Writes one line of a table comparing several runs, so that the heading and the lines below it line up.
+	 *
+	 * @param cells The six cells of the line, from the name of the run to the tasks refused.
+	 * @returns The written line.
+	 */
+	private static _formatSideBySideRow(cells: string[]): string {
+		return ReportPrinter._formatRow(cells, [22, 11, 17, 13, 16, 9]);
 	}
 
 	/**
