@@ -32,6 +32,15 @@ The documents are split into four folders, and the split is by the question the 
 - [Compare results that are not deterministic](guides/compare_non_deterministic_results.md)
 - [Set the cost of an identity](guides/set_the_cost_of_an_identity.md)
 
+## The explanation
+
+- [The design note](explanation/design_note.md)
+- [Three separate questions](explanation/three_separate_questions.md)
+- [When a payment becomes spendable](explanation/when_a_payment_becomes_spendable.md)
+- [The account or the device](explanation/account_or_device.md)
+- [The central hypothesis](explanation/the_central_hypothesis.md)
+- [Prior art](explanation/prior_art.md)
+
 ## The reference
 
 - [The public interface](reference/public_interface.md) — every name `src/index.ts` exports, in one list.
@@ -44,11 +53,3 @@ The documents are split into four folders, and the split is by the question the 
 - [Simulation](reference/simulation.md) — `SimulationEngine`, `MetricsCollector`, `ParameterSweep`, and the rest of the run.
 - [Metrics](reference/metrics.md) — one entry per measured number.
 
-## The explanation
-
-- [The design note](explanation/design_note.md)
-- [Three separate questions](explanation/three_separate_questions.md)
-- [When a payment becomes spendable](explanation/when_a_payment_becomes_spendable.md)
-- [The account or the device](explanation/account_or_device.md)
-- [The central hypothesis](explanation/the_central_hypothesis.md)
-- [Prior art](explanation/prior_art.md)
