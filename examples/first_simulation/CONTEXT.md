@@ -15,4 +15,4 @@ The first scenario run over the library: twenty honest workers, four unstable wo
 - The printer only reads the report. It never computes a metric the library did not measure, otherwise a metric would exist that no other example could obtain.
 
 ## Background
-- The task types follow the example of section 2 of [the design note](../../docs/design_note.md): the reference task costs 10 seconds and is worth 1 credit, task A costs 30 seconds, and task B costs 5 seconds. Those are the true costs; the scenario measures each of them five times with an error of up to one tenth, which is the pricing error of section 10.
+- The task types follow the example of section 2 of [the design note](../../docs/explanation/design_note.md): the reference task costs 10 seconds and is worth 1 credit, task A costs 30 seconds, and task B costs 5 seconds. Those are the true costs; the scenario measures each of them five times with an error of up to one tenth, which is the pricing error of section 10.

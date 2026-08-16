@@ -7,7 +7,7 @@ This repository holds a credit accounting library for a peer-to-peer inference n
 - `src/`: the library, whose one public interface is `src/index.ts` — see its own CONTEXT.md.
 - `examples/`: the scenarios that run over the library — see its own CONTEXT.md.
 - `tests/`: the tests of the library — see its own CONTEXT.md.
-- `docs/design_note.md`: the design note the whole repository implements.
+- `docs/`: the tutorial, the guides, the reference, and the explanation, including the design note the whole repository implements — see its own CONTEXT.md.
 - Command to run the tests: `npm test`
 - Command to type check this folder: `npm run typecheck`
 - Command to build the library: `npm run build`

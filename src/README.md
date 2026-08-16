@@ -2,7 +2,7 @@
 
 The credit accounting library of a peer-to-peer inference network: a network where a machine earns credits by executing the tasks of other people, and spends those credits to have its own tasks executed by other machines.
 
-The whole library follows one idea from section 1 of [the design note](../docs/design_note.md). Three questions are asked about every task, they are hard for different reasons, and they are never mixed together.
+The whole library follows one idea from section 1 of [the design note](../docs/explanation/design_note.md). Three questions are asked about every task, they are hard for different reasons, and they are never mixed together.
 
 - **What is this task worth?** A price, in credits, read from what the task costs on one reference machine.
 - **How much is this worker trusted?** A score that rises every time another worker confirms a result and falls every time one contradicts it.
@@ -102,3 +102,4 @@ Where a module would otherwise have to reach across one of those lines, it recei
 - [`examples/first_simulation/`](../examples/first_simulation/README.md) runs a whole network over this library and prints what it measured.
 - [`examples/parameter_sweeps/`](../examples/parameter_sweeps/README.md) runs it many times over and judges where the network is worth running.
 - [`tests/`](../tests/CONTEXT.md) holds one test file per part of the library. Run them with `npm test`.
+- [`docs/reference/public_interface.md`](../docs/reference/public_interface.md) lists every exported name, and [`docs/`](../docs/README.md) indexes the tutorial, the guides, the reference, and the explanation.

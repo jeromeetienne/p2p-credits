@@ -14,7 +14,7 @@ The run is reproducible: the seed is fixed in `simulation_parameters.ts`, so the
 
 ## The three task types
 
-The task types follow the example of section 2 of [the design note](../../docs/design_note.md). The reference task truly costs 10 seconds on the reference machine and is worth 1 credit, task A truly costs 30 seconds, and task B truly costs 5 seconds.
+The task types follow the example of section 2 of [the design note](../../docs/explanation/design_note.md). The reference task truly costs 10 seconds on the reference machine and is worth 1 credit, task A truly costs 30 seconds, and task B truly costs 5 seconds.
 
 The network never reads those true costs. A benchmark measures each task type five times, and every measured run misses the true cost by up to one tenth, so the prices the network works with are a few percent wrong, exactly as they are in reality. The `price` section of the report puts the measured cost beside the true cost so that the error can be read.
 

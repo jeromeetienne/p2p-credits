@@ -1,6 +1,6 @@
 # Parameter Sweeps
 
-Runs the scenario of [`first_simulation`](../first_simulation/README.md) many times over, moving one parameter at a time, and judges every value against the three conditions of section 15 of [the design note](../../docs/design_note.md): the validation cost stays low, fraud stays unprofitable, and honest users meet little friction.
+Runs the scenario of [`first_simulation`](../first_simulation/README.md) many times over, moving one parameter at a time, and judges every value against the three conditions of section 15 of [the design note](../../docs/explanation/design_note.md): the validation cost stays low, fraud stays unprofitable, and honest users meet little friction.
 
 The question the whole repository exists to answer is whether any set of parameters meets all three at once. This example is where that question is measured rather than argued.
 
@@ -49,7 +49,7 @@ The verdict is `no` at every value of every sweep, and the hypothesis of section
 
 - The deficit allowed to a new account is what drives the friction an honest worker meets, and raising it is also what makes the Sybil attack less unprofitable. The two conditions pull against each other through the same parameter.
 - Raising the initial trust makes verification cheap and makes fraud pay, in the same movement.
-- The tuned scenario does satisfy the fraud condition and the friction condition at once, which none of the single sweeps manage. It fails the cost condition: it spends about 23 percent of the compute validating against a limit of 20 percent, and about 21 percent of it even with no attacker at all. The floor is the cost of verifying newcomers, not the cost of catching anybody.
+- The tuned scenario comes closest, and it fails one condition at a time rather than three. With no attacker at all it spends 16 percent of the compute validating, inside the limit of 20 percent, and rejects almost no genuine result, but it still refuses 15 percent of the tasks of honest workers against a limit of 10 percent. As soon as two attackers are added the friction falls to 9 percent and the validation cost climbs to 25 percent, so the two conditions trade against each other instead of holding together.
 
 ## The files
 

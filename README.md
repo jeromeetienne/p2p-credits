@@ -34,7 +34,7 @@ npm run example:parameter_sweeps
 - `examples/first_simulation/`: the first scenario, which uses the library exactly as an external user would — see [its README](examples/first_simulation/README.md).
 - `examples/parameter_sweeps/`: the same scenario at many values of one parameter at a time, judged against the three conditions the network has to meet at once — see [its README](examples/parameter_sweeps/README.md).
 - `tests/`: the tests of the library, one file per part of the library.
-- `docs/design_note.md`: the design note the whole repository implements.
+- `docs/`: everything written about the repository that is not a `CONTEXT.md` and not the `README.md` of a folder — see [its index](docs/README.md).
 
 Each folder holds a `CONTEXT.md` that states what the folder is responsible for and which boundary must not be broken.
 
@@ -47,6 +47,16 @@ Each folder holds a `CONTEXT.md` that states what the folder is responsible for 
 - `npm run example:parameter_sweeps`: run the six parameter sweeps and judge the central hypothesis.
 
 ## Documents
+
+Everything is indexed in [`docs/README.md`](docs/README.md), and the documents are split by the question the reader is asking.
+
+- Never ran this repository: [the tutorial](docs/tutorial/01_first_simulation.md).
+- One task to perform: [the guides](docs/guides/).
+- The exact parameters of an exported name: [the reference](docs/reference/public_interface.md).
+- Why the design is the way it is: [the explanation](docs/explanation/), starting with [the design note](docs/explanation/design_note.md).
+- What the repository measured: [the central hypothesis](docs/explanation/the_central_hypothesis.md).
+
+The authoritative versions of two of them live in the issue tracker.
 
 - The design note: [issue #1](https://github.com/jeromeetienne/p2p-credits/issues/1)
 - The implementation plan: [issue #2](https://github.com/jeromeetienne/p2p-credits/issues/2)

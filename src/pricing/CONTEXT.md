@@ -17,4 +17,4 @@ The price of a task, expressed in credits, computed from the cost the task takes
 - Nothing here imports from `trust/`, `validation/`, or `ledger/`.
 
 ## Background
-- The normalized cost, the reference benchmark, and the recalibration come from section 2 of [the design note](../../docs/design_note.md), and the questions left open about the number of reference machines and the drift of a benchmark come from section 12.6.
+- The normalized cost, the reference benchmark, and the recalibration come from section 2 of [the design note](../../docs/explanation/design_note.md), and the questions left open about the number of reference machines and the drift of a benchmark come from section 12.6.

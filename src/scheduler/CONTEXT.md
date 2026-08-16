@@ -15,4 +15,4 @@ The choice of the device that executes a task, and the choice of the device that
 - The scheduler asks the `DeviceEligibilityFn` whether a device receives tasks right now, and never answers that question itself. It therefore stays ignorant of the reason a device is set aside, whether that reason is a suspension or anything added later. A task with no eligible device is not assigned, rather than forced onto a suspended worker.
 
 ## Background
-- The assignment by the scheduler answers the arbitrage of section 12.7 of [the design note](../../docs/design_note.md), and the unpredictable choice of a validator answers the collusion of section 12.2. A preference for workers that appear unrelated is left for later.
+- The assignment by the scheduler answers the arbitrage of section 12.7 of [the design note](../../docs/explanation/design_note.md), and the unpredictable choice of a validator answers the collusion of section 12.2. A preference for workers that appear unrelated is left for later.

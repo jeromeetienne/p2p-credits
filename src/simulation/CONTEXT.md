@@ -24,4 +24,4 @@ The primitives that run a simulated network over the rest of the library: virtua
 - A metric that two runs are compared by is a share or an average, never a count. A run that executes half as many tasks meets half as much fraud, and that says nothing about how safe it was.
 
 ## Background
-- The kinds of worker and what a run must model come from section 9 of [the design note](../../docs/design_note.md), the parameters from section 10, and the measured metrics from section 11.
+- The kinds of worker and what a run must model come from section 9 of [the design note](../../docs/explanation/design_note.md), the parameters from section 10, and the measured metrics from section 11.

@@ -18,4 +18,4 @@ The validity of a result: which tasks are duplicated, whether two results say th
 - Nothing here imports from `pricing/`, `trust/`, or `ledger/`. A trust score arrives as a plain number or as a `WorkerTrustFn`, and the folder never asks where it came from.
 
 ## Background
-- Sampled validation, duplication, and the third source of truth come from section 4 of [the design note](../../docs/design_note.md). The four comparison strategies answer section 12.1, and weighing a vote by trust is the "compare against a highly trusted worker" of section 4.
+- Sampled validation, duplication, and the third source of truth come from section 4 of [the design note](../../docs/explanation/design_note.md). The four comparison strategies answer section 12.1, and weighing a vote by trust is the "compare against a highly trusted worker" of section 4.

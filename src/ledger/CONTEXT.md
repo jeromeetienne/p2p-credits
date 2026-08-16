@@ -17,4 +17,4 @@ The append-only list of the movements of credits, the balances reconstructed fro
 - The ledger answers what an account was paid for results nobody verified, and what was already taken back from it, but it never decides to take anything back. The penalty is decided in `trust/` and the movement is recorded here.
 
 ## Background
-- The fields of a movement and the reconstruction of the balance come from section 5 of [the design note](../../docs/design_note.md). The three settlement policies come from section 6, and which one to keep is left open by section 12.4, so the choice is a parameter and the simulation measures what each one costs.
+- The fields of a movement and the reconstruction of the balance come from section 5 of [the design note](../../docs/explanation/design_note.md). The three settlement policies come from section 6, and which one to keep is left open by section 12.4, so the choice is a parameter and the simulation measures what each one costs.

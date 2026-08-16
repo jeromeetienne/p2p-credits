@@ -18,4 +18,4 @@ The shapes shared by every module of the library: the account, the device, the t
 - An account holds its identity only. Its balance is reconstructed from the ledger and its trust score is held by the trust module, because those three concerns stay separate.
 
 ## Background
-- The shapes follow the minimal architecture of section 13 of [the design note](../../docs/design_note.md), and the fields of a ledger entry follow section 5.
+- The shapes follow the minimal architecture of section 13 of [the design note](../../docs/explanation/design_note.md), and the fields of a ledger entry follow section 5.

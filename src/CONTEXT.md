@@ -23,4 +23,4 @@ The credit accounting library. It answers three separate questions — the price
 - Every import of a file of this library ends with `.js`, because the library is compiled to a Node.js module.
 
 ## Background
-- The separation of the three questions comes from section 1 of [the design note](../docs/design_note.md).
+- The separation of the three questions comes from section 1 of [the design note](../docs/explanation/design_note.md).

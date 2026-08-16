@@ -17,4 +17,4 @@ The trust of every account and of every device: the estimated likelihood that a 
 - Nothing here imports from `pricing/`, `validation/`, or `ledger/`. A penalty that takes credits back says so, and the caller records the movement.
 
 ## Background
-- The trust score, its rise, and its fall come from section 3 of [the design note](../../docs/design_note.md). The five penalties come from section 12.5, and the split between the account and the device is the question of section 12.3, which the simulation measures rather than answers.
+- The trust score, its rise, and its fall come from section 3 of [the design note](../../docs/explanation/design_note.md). The five penalties come from section 12.5, and the split between the account and the device is the question of section 12.3, which the simulation measures rather than answers.

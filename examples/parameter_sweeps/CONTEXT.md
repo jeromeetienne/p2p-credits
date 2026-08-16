@@ -16,4 +16,4 @@ Runs the first scenario at many values of one parameter at a time, and judges ev
 - The base scenario is imported from `first_simulation`, so the two examples never drift apart.
 
 ## Background
-- The five parameters swept come from section 10 of [the design note](../../docs/design_note.md), the metrics from section 11, and the three conditions from section 15. The sixth sweep, over the deficit allowed to a new account, was added because the first five showed that deficit deciding almost all of the friction an honest worker meets.
+- The five parameters swept come from section 10 of [the design note](../../docs/explanation/design_note.md), the metrics from section 11, and the three conditions from section 15. The sixth sweep, over the deficit allowed to a new account, was added because the first five showed that deficit deciding almost all of the friction an honest worker meets.

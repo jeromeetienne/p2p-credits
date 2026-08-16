@@ -14,4 +14,4 @@ Who is allowed into the network, what an identity costs to create, and how far a
 - Nothing here imports from `pricing/`, `trust/`, `validation/`, or `ledger/`.
 
 ## Background
-- The cost of an identity answers section 7 of [the design note](../../docs/design_note.md), and contributing before consuming answers section 8. Whether a new account should be allowed a deficit at all is left open by section 12.8, so the deficit is a parameter and not a decision.
+- The cost of an identity answers section 7 of [the design note](../../docs/explanation/design_note.md), and contributing before consuming answers section 8. Whether a new account should be allowed a deficit at all is left open by section 12.8, so the deficit is a parameter and not a decision.
