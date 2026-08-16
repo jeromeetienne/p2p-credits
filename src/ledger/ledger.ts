@@ -18,6 +18,13 @@ export class Ledger {
 	/** Every movement ever recorded, in the order of arrival. Entries are never modified and never removed. */
 	private _entries: LedgerEntry[] = [];
 
+	/**
+	 * The same movements, gathered by the account they belong to. This is an index and never a second source of
+	 * truth: it holds the very entries of `_entries`, and it is written only by `append`. Without it, every balance
+	 * would read the whole ledger, and the cost of a run would grow with the square of the number of movements.
+	 */
+	private _entriesByAccountId = new Map<AccountId, LedgerEntry[]>();
+
 	/** Number given to the next entry, used to build the identifier of that entry. */
 	private _nextEntryNumber = 1;
 
@@ -34,6 +41,11 @@ export class Ledger {
 		};
 		this._nextEntryNumber += 1;
 		this._entries.push(ledgerEntry);
+
+		const entriesOfAccount = this._entriesByAccountId.get(ledgerEntry.accountId) ?? [];
+		entriesOfAccount.push(ledgerEntry);
+		this._entriesByAccountId.set(ledgerEntry.accountId, entriesOfAccount);
+
 		return ledgerEntry;
 	}
 
@@ -53,7 +65,7 @@ export class Ledger {
 	 * @returns The movements of that account, in the order of arrival.
 	 */
 	entriesOf(accountId: AccountId): LedgerEntry[] {
-		return this._entries.filter((ledgerEntry) => ledgerEntry.accountId === accountId);
+		return [...this._entriesOfAccount(accountId)];
 	}
 
 	/**
@@ -63,7 +75,7 @@ export class Ledger {
 	 * @returns The balance in credits, which can be negative.
 	 */
 	balanceOf(accountId: AccountId): number {
-		return this._sumOf(this.entriesOf(accountId));
+		return this._sumOf(this._entriesOfAccount(accountId));
 	}
 
 	/**
@@ -77,7 +89,7 @@ export class Ledger {
 	 * @returns The spendable balance in credits, which can be negative.
 	 */
 	spendableBalanceOf(accountId: AccountId, currentTick: number): number {
-		const spendableEntries = this.entriesOf(accountId).filter((ledgerEntry) => {
+		const spendableEntries = this._entriesOfAccount(accountId).filter((ledgerEntry) => {
 			if (ledgerEntry.entryType !== 'credit') {
 				return true;
 			}
@@ -100,7 +112,7 @@ export class Ledger {
 	 */
 	earnedTotalOf(accountId: AccountId): number {
 		let total = 0;
-		for (const ledgerEntry of this.entriesOf(accountId)) {
+		for (const ledgerEntry of this._entriesOfAccount(accountId)) {
 			if (ledgerEntry.entryType === 'credit') {
 				total += ledgerEntry.amount;
 			}
@@ -119,7 +131,7 @@ export class Ledger {
 	 */
 	unverifiedCreditTotalOf(accountId: AccountId): number {
 		let total = 0;
-		for (const ledgerEntry of this.entriesOf(accountId)) {
+		for (const ledgerEntry of this._entriesOfAccount(accountId)) {
 			if (ledgerEntry.entryType === 'credit' && ledgerEntry.validationStatus === 'unverified') {
 				total += ledgerEntry.amount;
 			}
@@ -138,7 +150,7 @@ export class Ledger {
 	 */
 	consumedTotalOf(accountId: AccountId): number {
 		let total = 0;
-		for (const ledgerEntry of this.entriesOf(accountId)) {
+		for (const ledgerEntry of this._entriesOfAccount(accountId)) {
 			if (ledgerEntry.entryType === 'debit') {
 				total += ledgerEntry.amount;
 			}
@@ -154,7 +166,7 @@ export class Ledger {
 	 */
 	adjustmentTotalOf(accountId: AccountId): number {
 		let total = 0;
-		for (const ledgerEntry of this.entriesOf(accountId)) {
+		for (const ledgerEntry of this._entriesOfAccount(accountId)) {
 			if (ledgerEntry.entryType === 'adjustment') {
 				total += ledgerEntry.amount;
 			}
@@ -193,6 +205,19 @@ export class Ledger {
 			}
 		}
 		return total;
+	}
+
+	/**
+	 * Returns the movements of one account, as the index holds them.
+	 *
+	 * The returned list is the one held by the index, so it is read and never written. Whoever asks for the movements
+	 * of an account from outside the ledger receives a copy instead, through `entriesOf`.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @returns The movements of that account, in the order of arrival.
+	 */
+	private _entriesOfAccount(accountId: AccountId): LedgerEntry[] {
+		return this._entriesByAccountId.get(accountId) ?? [];
 	}
 
 	/**

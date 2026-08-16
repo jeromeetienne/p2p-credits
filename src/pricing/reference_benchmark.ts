@@ -1,4 +1,4 @@
-import type { BenchmarkEnvironment, BenchmarkRun } from '../types/benchmark_types.js';
+import { BenchmarkRunSchema, type BenchmarkEnvironment, type BenchmarkRun } from '../types/benchmark_types.js';
 import type { TaskType, TaskTypeName } from '../types/task_types.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -48,10 +48,15 @@ export class ReferenceBenchmark {
 	/**
 	 * Records one measured execution of one task type on one reference machine.
 	 *
+	 * The run is checked against its schema before it is kept, because a duration at or below zero is not a
+	 * measurement, and a price read from it would be at or below zero as well.
+	 *
 	 * @param benchmarkRun The measured run.
 	 * @returns Nothing.
+	 * @throws When the run does not hold a positive duration and the two names a measurement needs.
 	 */
 	recordRun(benchmarkRun: BenchmarkRun): void {
+		BenchmarkRunSchema.parse(benchmarkRun);
 		const benchmarkRuns = this._runsByTaskTypeName.get(benchmarkRun.taskTypeName) ?? [];
 		benchmarkRuns.push(benchmarkRun);
 		this._runsByTaskTypeName.set(benchmarkRun.taskTypeName, benchmarkRuns);
@@ -119,13 +124,21 @@ export class ReferenceBenchmark {
 	}
 
 	/**
-	 * Returns every measured task type, in the shape the pricer expects.
+	 * Returns every task type measured enough times, in the shape the pricer expects.
 	 *
-	 * @returns The measured task types.
+	 * A task type still being measured is left out rather than made to throw, because one task type whose runs are not
+	 * all collected yet must not stop the network from pricing the task types that are ready. The reference task type
+	 * is the exception: `referenceTaskCostSeconds` still throws when it is not measured enough, because without it no
+	 * price can be read at all.
+	 *
+	 * @returns The task types that have at least the number of runs the benchmark requires.
 	 */
 	measuredTaskTypes(): TaskType[] {
 		const taskTypes: TaskType[] = [];
 		for (const taskTypeName of this._runsByTaskTypeName.keys()) {
+			if (this.runCountOf(taskTypeName) < this._minimumRunCount) {
+				continue;
+			}
 			taskTypes.push({
 				taskTypeName: taskTypeName,
 				referenceCostSeconds: this.measuredCostSecondsOf(taskTypeName),

@@ -145,3 +145,10 @@ test('a second suspension never shortens the first one', () => {
 	Assert.equal(suspensionBook.isSuspended('alice', 40), true);
 	Assert.equal(suspensionBook.suspensionCount(), 2);
 });
+
+test('a reset never raises the score of a worker that had already fallen below a newcomer', () => {
+	const trustPolicy = buildPolicy('reset');
+
+	Assert.equal(trustPolicy.afterInvalidResult(-12).newTrust, -17);
+	Assert.equal(trustPolicy.afterInvalidResult(0).newTrust, -5);
+});

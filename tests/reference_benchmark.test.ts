@@ -112,3 +112,32 @@ test('every measured task type is handed on with its measured cost', () => {
 	]);
 	Assert.equal(referenceBenchmark.referenceTaskCostSeconds(), 10);
 });
+
+test('a task type still being measured is left out rather than made to throw', () => {
+	const referenceBenchmark = buildBenchmark('reference task', [10, 10, 10], 3);
+	referenceBenchmark.recordRun({
+		taskTypeName: 'task A',
+		referenceMachineName: 'a reference machine',
+		durationSeconds: 30,
+	});
+
+	Assert.deepEqual(referenceBenchmark.measuredTaskTypes(), [
+		{
+			taskTypeName: 'reference task',
+			referenceCostSeconds: 10,
+		},
+	]);
+});
+
+test('a run with no duration at all is not a measurement', () => {
+	const referenceBenchmark = buildBenchmark('reference task', [10]);
+
+	Assert.throws(() => {
+		referenceBenchmark.recordRun({
+			taskTypeName: 'task A',
+			referenceMachineName: 'a reference machine',
+			durationSeconds: 0,
+		});
+	});
+	Assert.equal(referenceBenchmark.runCountOf('task A'), 0);
+});

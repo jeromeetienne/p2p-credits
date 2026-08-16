@@ -154,3 +154,65 @@ test('an arbiter is still found when the trusted share leaves less than one cand
 
 	Assert.notEqual(validatorSelector.chooseArbiter(task, []), undefined);
 });
+
+test('the account that requested a task never executes it', () => {
+	const taskOfBob: Task = {
+		taskId: 'task-2',
+		taskTypeName: 'a task',
+		requesterAccountId: 'bob',
+		createdAtTick: 0,
+	};
+	const drawnAccountIds = new Set<string>();
+	for (const drawnShare of [0, 0.4, 0.9]) {
+		const taskScheduler = new TaskScheduler({
+			devices: devices,
+			randomNumberFn: () => {
+				return drawnShare;
+			},
+		});
+		const taskAssignment = taskScheduler.assign(taskOfBob);
+		if (taskAssignment === undefined) {
+			continue;
+		}
+		drawnAccountIds.add(taskAssignment.accountId);
+	}
+
+	Assert.equal(drawnAccountIds.has('bob'), false);
+	Assert.equal(drawnAccountIds.size, 2);
+});
+
+test('a task is refused rather than handed back to the only account left, its requester', () => {
+	const taskOfAlice: Task = {
+		taskId: 'task-3',
+		taskTypeName: 'a task',
+		requesterAccountId: 'alice',
+		createdAtTick: 0,
+	};
+	const taskScheduler = new TaskScheduler({
+		devices: [buildDevice('alice')],
+		randomNumberFn: () => {
+			return 0;
+		},
+	});
+
+	Assert.equal(taskScheduler.assign(taskOfAlice), undefined);
+});
+
+test('the account that requested a task neither validates it nor settles it', () => {
+	const taskOfAlice: Task = {
+		taskId: 'task-4',
+		taskTypeName: 'a task',
+		requesterAccountId: 'alice',
+		createdAtTick: 0,
+	};
+	const validatorSelector = new ValidatorSelector({
+		devices: devices,
+		randomNumberFn: () => {
+			return 0;
+		},
+	});
+
+	Assert.equal(validatorSelector.chooseValidator(taskOfAlice, [])?.accountId, 'bob');
+	Assert.equal(validatorSelector.chooseArbiter(taskOfAlice, ['bob'])?.accountId, 'charlie');
+	Assert.equal(validatorSelector.chooseValidator(taskOfAlice, ['bob', 'charlie']), undefined);
+});

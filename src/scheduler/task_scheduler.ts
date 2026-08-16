@@ -24,6 +24,9 @@ export type TaskSchedulerOptions = {
  * The scheduler chooses the device, and a worker therefore never selects the task it executes. This removes the
  * arbitrage of section 12.7 of the design note, where every worker would pick the task type that happens to be the
  * most profitable on its own hardware.
+ *
+ * The account that requested a task never executes it either, because a task executed by the account that asked for
+ * it pays that account exactly what it was debited and hands it the trust of a confirmed worker for nothing.
  */
 export class TaskScheduler {
 	/** Every device able to execute a task. */
@@ -48,10 +51,15 @@ export class TaskScheduler {
 	}
 
 	/**
-	 * Assigns one task to one device chosen at random among the devices that receive tasks right now.
+	 * Assigns one task to one device chosen at random among the devices that receive tasks right now, leaving out
+	 * every device of the account that requested the task.
+	 *
+	 * An account that executed its own task would be debited and paid the same amount, so it would gain trust and
+	 * would satisfy the rule about contributing before consuming at no cost at all, and the result nobody else looked
+	 * at would be its own.
 	 *
 	 * @param task The task to assign.
-	 * @returns The assignment of the task to a device, or `undefined` when no device receives tasks right now.
+	 * @returns The assignment of the task to a device, or `undefined` when no other account receives tasks right now.
 	 * @throws When the scheduler was built with no device at all.
 	 */
 	assign(task: Task): TaskAssignment | undefined {
@@ -59,6 +67,9 @@ export class TaskScheduler {
 			throw new Error('no device is able to execute a task');
 		}
 		const eligibleDevices = this._devices.filter((candidateDevice) => {
+			if (candidateDevice.accountId === task.requesterAccountId) {
+				return false;
+			}
 			return this._isDeviceEligibleFn(candidateDevice);
 		});
 		if (eligibleDevices.length === 0) {

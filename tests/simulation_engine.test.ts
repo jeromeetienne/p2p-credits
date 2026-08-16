@@ -210,3 +210,36 @@ test('an account a Sybil attacker abandons is replaced by a freshly opened one',
 	Assert.equal(simulationReport.deviceSummaries.length > simulationReport.workerSummaries.length * 2, true);
 	Assert.equal(simulationReport.totalIdentityCost, simulationReport.createdAccountCount * baseParameters.identityCost);
 });
+
+test('an account is never abandoned for a replacement that starts no higher', () => {
+	const simulationReport = new SimulationEngine({
+		...baseParameters,
+		sybilAbandonTrust: baseParameters.initialTrust,
+	}).run();
+
+	Assert.equal(simulationReport.abandonedAccountCount, 0);
+	Assert.equal(
+		simulationReport.createdAccountCount,
+		baseParameters.honestWorkerCount
+			+ baseParameters.unstableWorkerCount
+			+ baseParameters.maliciousWorkerCount
+			+ baseParameters.sybilAttackerCount,
+	);
+});
+
+test('a payment a settlement policy still holds is dropped when its worker is caught', () => {
+	/**
+	 * A settlement in batches records nothing before the end of a period, so no account can earn anything to spend
+	 * inside that period. The deficit allowed to a newcomer is opened wide here, and only here, so that tasks are
+	 * actually executed and payments actually pile up while waiting to be recorded.
+	 */
+	const heldPaymentParameters: SimulationParameters = {
+		...baseParameters,
+		settlementPolicyName: 'delayed settlement',
+		penaltyPolicyName: 'credit confiscation',
+		allowedInitialDeficit: 100,
+	};
+
+	Assert.equal(new SimulationEngine(heldPaymentParameters).run().droppedHeldCredits > 0, true);
+	Assert.equal(new SimulationEngine(baseParameters).run().droppedHeldCredits, 0);
+});

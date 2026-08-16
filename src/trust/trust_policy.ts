@@ -20,7 +20,8 @@ export const PenaltyPolicyNameSchema = Zod.enum([
  *
  * - `small reduction`: the trust falls by the ordinary amount.
  * - `strong reduction`: the trust falls by the ordinary amount multiplied by the strong penalty factor.
- * - `reset`: the trust returns to the value a brand new account starts with.
+ * - `reset`: the trust returns to the value a brand new account starts with, and a worker that had already fallen
+ *   below that value takes the ordinary reduction instead. A penalty never raises a trust score.
  * - `suspension`: the trust falls by the ordinary amount, and the worker receives no task for a while.
  * - `credit confiscation`: the trust falls by the ordinary amount, and the credits the worker was paid for results
  *   nobody ever verified are taken back, because those results are now suspect.
@@ -100,6 +101,10 @@ export class TrustPolicy {
 	/**
 	 * Lowers a score and applies the penalty policy, because other workers contradicted the result.
 	 *
+	 * Whatever the policy, the new score is never higher than the score the worker had. A `reset` that raised the
+	 * score of a worker already below the value a newcomer starts with would reward that worker for being caught, and
+	 * would hold it at the standing of a newcomer however often it was contradicted.
+	 *
 	 * @param currentTrust The score before the result was judged.
 	 * @returns The new score, and what else the network takes from the worker.
 	 */
@@ -116,7 +121,7 @@ export class TrustPolicy {
 		}
 		if (this._options.penaltyPolicyName === 'reset') {
 			return {
-				newTrust: this._boundedTrust(this._options.initialTrust),
+				newTrust: this._boundedTrust(Math.min(this._options.initialTrust, ordinaryTrust)),
 				suspensionTickCount: 0,
 				confiscatesUnverifiedCredits: false,
 			};

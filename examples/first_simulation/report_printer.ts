@@ -85,6 +85,8 @@ export class ReportPrinter {
 		console.log(
 			`credits taken back               ${ReportPrinter._formatCredits(simulationReport.confiscatedCredits)}`,
 		);
+		const droppedHeldCredits = ReportPrinter._formatCredits(simulationReport.droppedHeldCredits);
+		console.log(`credits dropped before payment   ${droppedHeldCredits}`);
 		console.log('');
 
 		console.log('--- identity ---');

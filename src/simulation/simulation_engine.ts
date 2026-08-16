@@ -35,6 +35,15 @@ import { WorkerBehavior, type WorkerProfile } from './worker_behavior.js';
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+/**
+ * Smallest share of the true cost of a task type a measurement is allowed to return.
+ *
+ * A pricing error at or above 1 would otherwise let one measured duration reach zero or fall below it, and a price
+ * read from such a duration would be zero or negative: a worker would be paid nothing for its work, or the account
+ * that requested a task would be paid for asking.
+ */
+const SMALLEST_MEASURED_SHARE = 0.01;
+
 /** One result returned during a run, and whether the worker really did the work it was paid for. */
 type SimulatedResult = {
 	/** The result the network sees. */
@@ -311,10 +320,14 @@ export class SimulationEngine {
 		for (const trueTaskCost of this._parameters.taskCosts) {
 			for (let runIndex = 0; runIndex < this._parameters.benchmarkRunCount; runIndex += 1) {
 				const errorRatio = (this._randomNumberFn() * 2 - 1) * this._parameters.pricingErrorRatio;
+				const measuredCostSeconds = Math.max(
+					trueTaskCost.trueCostSeconds * (1 + errorRatio),
+					trueTaskCost.trueCostSeconds * SMALLEST_MEASURED_SHARE,
+				);
 				referenceBenchmark.recordRun({
 					taskTypeName: trueTaskCost.taskTypeName,
 					referenceMachineName: 'reference machine',
-					durationSeconds: trueTaskCost.trueCostSeconds * (1 + errorRatio),
+					durationSeconds: measuredCostSeconds,
 				});
 			}
 		}
@@ -453,9 +466,16 @@ export class SimulationEngine {
 	 * The abandoned account keeps its balance and its history, and receives no further task. What the attacker gains
 	 * by starting again is a trust score of a newcomer; what it loses is the price of one more identity.
 	 *
+	 * Nothing is abandoned when a newcomer starts at or below the trust the attacker abandons an account at, because
+	 * the replacement would then be worth no more than the account it replaces. Without that condition, every attacker
+	 * would open one account per tick for the whole run and never execute anything.
+	 *
 	 * @returns Nothing.
 	 */
 	private _replaceAbandonedSybilAccounts(): void {
+		if (this._trustPolicy.initialTrust() <= this._parameters.sybilAbandonTrust) {
+			return;
+		}
 		const tick = this._simulationClock.currentTick();
 
 		for (let workerIndex = 0; workerIndex < this._workerProfiles.length; workerIndex += 1) {
@@ -850,12 +870,22 @@ export class SimulationEngine {
 	}
 
 	/**
-	 * Takes back the credits an account was paid for results nobody ever verified.
+	 * Takes back the credits an account was paid for results nobody ever verified, and drops the payments for such
+	 * results that a settlement policy is still holding.
+	 *
+	 * A payment that is only held is not in the ledger, so no correction can reach it. It is dropped instead, without
+	 * which the penalty would grow weaker the longer the settlement policy waits: everything earned during the current
+	 * period would escape the penalty and then be recorded in full, once the worker had already been caught.
 	 *
 	 * @param taskResult The contradicted result that caused the penalty.
 	 * @returns Nothing.
 	 */
 	private _confiscateUnverifiedCredits(taskResult: TaskResult): void {
+		const droppedHeldTotal = this._deferredPaymentBook.dropUnverifiedCreditsOf(taskResult.accountId);
+		if (droppedHeldTotal > 0) {
+			this._metricsCollector.recordDroppedHeldCredits(droppedHeldTotal);
+		}
+
 		const unverifiedTotal = this._ledger.unverifiedCreditTotalOf(taskResult.accountId);
 		const alreadyTakenBack = -this._ledger.adjustmentTotalOf(taskResult.accountId);
 		const amountToTakeBack = unverifiedTotal - alreadyTakenBack;

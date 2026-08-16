@@ -140,6 +140,9 @@ export class MetricsCollector {
 	/** Amount of credits taken back from workers caught returning a wrong result. */
 	private _confiscatedCredits = 0;
 
+	/** Amount of credits dropped before being recorded, because the worker owed them was caught first. */
+	private _droppedHeldCredits = 0;
+
 	/** Amount of credits created only because the benchmark did not measure the true cost. */
 	private _creditsCreatedByPricingError = 0;
 
@@ -281,6 +284,20 @@ export class MetricsCollector {
 	}
 
 	/**
+	 * Records that the network dropped a payment it was holding, because the worker it was owed to was caught before
+	 * the payment was ever recorded.
+	 *
+	 * The amount is counted apart from the confiscated credits, because nothing was taken out of the ledger: the
+	 * payment never entered it. Keeping the two apart is what lets the books of a run still be closed.
+	 *
+	 * @param amount Amount dropped, in credits.
+	 * @returns Nothing.
+	 */
+	recordDroppedHeldCredits(amount: number): void {
+		this._droppedHeldCredits += amount;
+	}
+
+	/**
 	 * Records that the network refused a task, because the account asking for it had not contributed enough.
 	 *
 	 * @param behaviorName The behaviour of the worker that was refused.
@@ -368,6 +385,7 @@ export class MetricsCollector {
 			unassignedTaskCount: this._unassignedTaskCount,
 			suspensionCount: reportInputs.suspensionBook.suspensionCount(),
 			confiscatedCredits: this._confiscatedCredits,
+			droppedHeldCredits: this._droppedHeldCredits,
 			refusedTaskCount: this._refusedTaskCount,
 			refusedTaskCounts: Array.from(this._refusedTaskCountByBehaviorName.entries()).map((entry) => {
 				return {

@@ -110,3 +110,25 @@ test('a payment is released once and never again', () => {
 	Assert.equal(deferredPaymentBook.heldCount(), 0);
 	Assert.equal(deferredPaymentBook.heldTotal(), 0);
 });
+
+test('a payment held for an unverified result is dropped when the worker is caught', () => {
+	const deferredPaymentBook = new DeferredPaymentBook();
+	deferredPaymentBook.hold({
+		...buildDraft(20, 5),
+		validationStatus: 'unverified',
+	});
+	deferredPaymentBook.hold({
+		...buildDraft(20, 3),
+		validationStatus: 'accepted',
+	});
+	deferredPaymentBook.hold({
+		...buildDraft(20, 7),
+		accountId: 'bob',
+		validationStatus: 'unverified',
+	});
+
+	Assert.equal(deferredPaymentBook.dropUnverifiedCreditsOf('alice'), 5);
+	Assert.equal(deferredPaymentBook.heldCount(), 2);
+	Assert.equal(deferredPaymentBook.heldTotal(), 10);
+	Assert.equal(deferredPaymentBook.dropUnverifiedCreditsOf('alice'), 0);
+});

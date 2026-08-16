@@ -37,7 +37,10 @@ export type SimulationSummary = {
 
 	/** Total amount of credits created during the run. */
 	creditsCreated: number;
-	/** Amount of credits created for every credit consumed. A number above 1 means the network is inflating. */
+	/**
+	 * Amount of credits created for every credit consumed. A number above 1 means the network is inflating, and
+	 * positive infinity means credits were created while nothing at all was consumed.
+	 */
 	inflationRatio: number;
 	/** Share of the credits held by the richest tenth of the accounts, between 0 and 1. */
 	creditShareOfRichestTenth: number;
@@ -103,7 +106,7 @@ export class ReportSummary {
 			),
 
 			creditsCreated: simulationReport.totalCreditsCreated,
-			inflationRatio: ReportSummary._shareOf(
+			inflationRatio: ReportSummary._inflationRatioOf(
 				simulationReport.totalCreditsCreated,
 				simulationReport.totalCreditsConsumed,
 			),
@@ -163,6 +166,27 @@ export class ReportSummary {
 			return undefined;
 		}
 		return totalTick / trustedWorkerCount;
+	}
+
+	/**
+	 * Returns the amount of credits created for every credit consumed.
+	 *
+	 * A run that consumed nothing cannot be given the value 0, which reads as the healthiest possible network: a run
+	 * that created credits against no consumption at all is the most inflated run there is, not the least.
+	 *
+	 * @param creditsCreated Total amount of credits created during the run.
+	 * @param creditsConsumed Total amount of credits consumed during the run.
+	 * @returns The amount created for every credit consumed, 1 when nothing was created and nothing was consumed, and
+	 *          positive infinity when credits were created and nothing was consumed.
+	 */
+	private static _inflationRatioOf(creditsCreated: number, creditsConsumed: number): number {
+		if (creditsConsumed !== 0) {
+			return creditsCreated / creditsConsumed;
+		}
+		if (creditsCreated === 0) {
+			return 1;
+		}
+		return Number.POSITIVE_INFINITY;
 	}
 
 	/**

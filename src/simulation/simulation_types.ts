@@ -282,6 +282,12 @@ export type SimulationReport = {
 	suspensionCount: number;
 	/** Amount of credits taken back from workers caught returning a wrong result, in credits. */
 	confiscatedCredits: number;
+	/**
+	 * Amount of credits a settlement policy was still holding and that were dropped before ever being recorded,
+	 * because the worker they were owed to was caught first, in credits. These credits never entered the ledger, so
+	 * they are counted apart from the credits taken back from it.
+	 */
+	droppedHeldCredits: number;
 	/** Number of tasks the network refused, because the account asking for them had not contributed enough. */
 	refusedTaskCount: number;
 	/** How many of those refusals each kind of worker met. */

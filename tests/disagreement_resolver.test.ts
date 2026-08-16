@@ -170,3 +170,45 @@ test('no result at all settles nothing', () => {
 	Assert.equal(majorityOutcome.majorityResultValue, undefined);
 	Assert.deepEqual(majorityOutcome.disagreeingAccountIds, []);
 });
+
+test('two results that agree land in the same group whatever order they arrived in', () => {
+	const nearestResult = buildResult('alice', '1.000');
+	const middleResult = buildResult('bob', '1.008');
+	const farthestResult = buildResult('charlie', '1.016');
+
+	const firstOrder = DisagreementResolver.resolveByMajority(
+		[nearestResult, middleResult, farthestResult],
+		tolerantComparator,
+		'a task',
+	);
+	const secondOrder = DisagreementResolver.resolveByMajority(
+		[middleResult, nearestResult, farthestResult],
+		tolerantComparator,
+		'a task',
+	);
+
+	Assert.deepEqual(firstOrder.disagreeingAccountIds, []);
+	Assert.deepEqual(secondOrder.disagreeingAccountIds, []);
+	Assert.equal(firstOrder.agreeingAccountIds.length, 3);
+	Assert.equal(secondOrder.agreeingAccountIds.length, 3);
+});
+
+test('a value nothing connects to the others still loses, whatever order it arrived in', () => {
+	const firstResult = buildResult('alice', '1.000');
+	const secondResult = buildResult('bob', '1.005');
+	const distantResult = buildResult('charlie', '9.000');
+
+	for (const taskResults of [
+		[firstResult, secondResult, distantResult],
+		[distantResult, firstResult, secondResult],
+	]) {
+		const majorityOutcome = DisagreementResolver.resolveByMajority(
+			taskResults,
+			tolerantComparator,
+			'a task',
+		);
+
+		Assert.deepEqual(majorityOutcome.disagreeingAccountIds, ['charlie']);
+		Assert.equal(majorityOutcome.agreeingAccountIds.length, 2);
+	}
+});

@@ -138,3 +138,34 @@ test('every movement keeps its own identifier, in the order it arrived', () => {
 	Assert.equal(secondEntry.entryId, 'entry-2');
 	Assert.equal(ledger.allEntries().length, 2);
 });
+
+test('the movements of one account never hold the movements of another', () => {
+	const ledger = new Ledger();
+	ledger.append(buildDraft({
+		accountId: 'alice',
+		amount: 10,
+	}));
+	ledger.append(buildDraft({
+		accountId: 'bob',
+		amount: 4,
+	}));
+
+	Assert.equal(ledger.entriesOf('alice').length, 1);
+	Assert.equal(ledger.entriesOf('bob').length, 1);
+	Assert.equal(ledger.entriesOf('charlie').length, 0);
+	Assert.equal(ledger.balanceOf('alice'), 10);
+	Assert.equal(ledger.balanceOf('bob'), 4);
+});
+
+test('the movements handed out are a copy, so nobody can write into the ledger', () => {
+	const ledger = new Ledger();
+	ledger.append(buildDraft({
+		amount: 10,
+	}));
+
+	const handedOutEntries = ledger.entriesOf('alice');
+	handedOutEntries.push(...handedOutEntries);
+
+	Assert.equal(ledger.entriesOf('alice').length, 1);
+	Assert.equal(ledger.balanceOf('alice'), 10);
+});

@@ -55,6 +55,12 @@ type ResultCluster = {
  * Two results are gathered together through the comparison strategy of their task type, never through a plain string
  * equality, otherwise two correct executions that differ by a rounding would each open a group of their own and no
  * group would ever win.
+ *
+ * Two results that agree always land in the same group, whatever order the results arrive in. A tolerant comparison
+ * does not carry over from one pair to the next — a result can agree with a second one and with a third one while
+ * those two disagree with each other — so every pair is compared and the groups are the parts the agreements connect.
+ * Gathering a result into the first group whose opening value it agreed with would instead make the verdict depend on
+ * the order of the draw, and would reject an honest worker in one order and confirm it in another.
  */
 export class DisagreementResolver {
 	/**
@@ -117,31 +123,15 @@ export class DisagreementResolver {
 		taskTypeName: TaskTypeName,
 		voteWeightFn: (taskResult: TaskResult) => number,
 	): MajorityOutcome {
-		const resultClusters: ResultCluster[] = [];
+		const resultClusters = DisagreementResolver._clustersOf(
+			taskResults,
+			resultComparator,
+			taskTypeName,
+			voteWeightFn,
+		);
 		let totalWeight = 0;
-
-		for (const taskResult of taskResults) {
-			const voteWeight = voteWeightFn(taskResult);
-			totalWeight += voteWeight;
-
-			const matchingCluster = resultClusters.find((resultCluster) => {
-				const comparisonOutcome = resultComparator.compare(
-					taskTypeName,
-					resultCluster.resultValue,
-					taskResult.resultValue,
-				);
-				return comparisonOutcome === 'agreement';
-			});
-			if (matchingCluster === undefined) {
-				resultClusters.push({
-					resultValue: taskResult.resultValue,
-					accountIds: [taskResult.accountId],
-					voteWeight: voteWeight,
-				});
-				continue;
-			}
-			matchingCluster.accountIds.push(taskResult.accountId);
-			matchingCluster.voteWeight += voteWeight;
+		for (const resultCluster of resultClusters) {
+			totalWeight += resultCluster.voteWeight;
 		}
 
 		let winningCluster: ResultCluster | undefined = undefined;
@@ -178,5 +168,83 @@ export class DisagreementResolver {
 			agreeingAccountIds: agreeingAccountIds,
 			disagreeingAccountIds: disagreeingAccountIds,
 		};
+	}
+
+	/**
+	 * Gathers the results into the groups the agreements connect: two results sit in the same group when they agree,
+	 * or when a chain of agreements leads from one to the other.
+	 *
+	 * Every pair of results is compared, so the groups never depend on the order the results arrived in. Each group is
+	 * named by the value of the first of its results, so the value that wins is the same whatever that order was.
+	 *
+	 * @param taskResults Every result returned for the same task.
+	 * @param resultComparator The comparison that says whether two values agree.
+	 * @param taskTypeName Name of the type of the task, which decides how the values are compared.
+	 * @param voteWeightFn The weight of the vote of one result.
+	 * @returns One group per set of results that say the same thing, in the order the groups were opened.
+	 */
+	private static _clustersOf(
+		taskResults: TaskResult[],
+		resultComparator: ResultComparator,
+		taskTypeName: TaskTypeName,
+		voteWeightFn: (taskResult: TaskResult) => number,
+	): ResultCluster[] {
+		const clusterIndexes = taskResults.map((_taskResult, resultIndex) => {
+			return resultIndex;
+		});
+
+		for (let indexA = 0; indexA < taskResults.length; indexA += 1) {
+			for (let indexB = indexA + 1; indexB < taskResults.length; indexB += 1) {
+				const resultA = taskResults[indexA];
+				const resultB = taskResults[indexB];
+				if (resultA === undefined || resultB === undefined) {
+					continue;
+				}
+				if (clusterIndexes[indexA] === clusterIndexes[indexB]) {
+					continue;
+				}
+				const comparisonOutcome = resultComparator.compare(
+					taskTypeName,
+					resultA.resultValue,
+					resultB.resultValue,
+				);
+				if (comparisonOutcome !== 'agreement') {
+					continue;
+				}
+				const absorbedClusterIndex = clusterIndexes[indexB];
+				const keptClusterIndex = clusterIndexes[indexA];
+				if (absorbedClusterIndex === undefined || keptClusterIndex === undefined) {
+					continue;
+				}
+				for (let index = 0; index < clusterIndexes.length; index += 1) {
+					if (clusterIndexes[index] === absorbedClusterIndex) {
+						clusterIndexes[index] = keptClusterIndex;
+					}
+				}
+			}
+		}
+
+		const clusterByIndex = new Map<number, ResultCluster>();
+		for (let resultIndex = 0; resultIndex < taskResults.length; resultIndex += 1) {
+			const taskResult = taskResults[resultIndex];
+			const clusterIndex = clusterIndexes[resultIndex];
+			if (taskResult === undefined || clusterIndex === undefined) {
+				continue;
+			}
+			const voteWeight = voteWeightFn(taskResult);
+			const existingCluster = clusterByIndex.get(clusterIndex);
+			if (existingCluster === undefined) {
+				clusterByIndex.set(clusterIndex, {
+					resultValue: taskResult.resultValue,
+					accountIds: [taskResult.accountId],
+					voteWeight: voteWeight,
+				});
+				continue;
+			}
+			existingCluster.accountIds.push(taskResult.accountId);
+			existingCluster.voteWeight += voteWeight;
+		}
+
+		return Array.from(clusterByIndex.values());
 	}
 }

@@ -1,3 +1,4 @@
+import type { AccountId } from '../types/account_types.js';
 import type { LedgerEntryDraft } from '../types/ledger_types.js';
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -41,6 +42,34 @@ export class DeferredPaymentBook {
 			return ledgerEntryDraft.tick > currentTick;
 		});
 		return dueDrafts;
+	}
+
+	/**
+	 * Drops the payments of one account that were owed for results nobody ever verified, and returns what they were
+	 * worth.
+	 *
+	 * A penalty that takes back the credits of unverified results has to reach these payments too. They are not in the
+	 * ledger, so nothing can be taken back from them: they are dropped before they are ever recorded, which is exactly
+	 * the moment a settlement in batches keeps for changing its mind.
+	 *
+	 * @param accountId Identifier of the account the payments belong to.
+	 * @returns The amount that was dropped, in credits.
+	 */
+	dropUnverifiedCreditsOf(accountId: AccountId): number {
+		let droppedTotal = 0;
+		const keptDrafts: LedgerEntryDraft[] = [];
+		for (const ledgerEntryDraft of this._heldDrafts) {
+			const isUnverifiedCreditOfAccount = ledgerEntryDraft.accountId === accountId
+				&& ledgerEntryDraft.entryType === 'credit'
+				&& ledgerEntryDraft.validationStatus === 'unverified';
+			if (isUnverifiedCreditOfAccount === false) {
+				keptDrafts.push(ledgerEntryDraft);
+				continue;
+			}
+			droppedTotal += ledgerEntryDraft.amount;
+		}
+		this._heldDrafts = keptDrafts;
+		return droppedTotal;
 	}
 
 	/**

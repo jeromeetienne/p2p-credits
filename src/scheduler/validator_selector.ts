@@ -30,9 +30,10 @@ export type ValidatorSelectorOptions = {
 /**
  * The choice of the worker that executes a duplicated copy of a task.
  *
- * The choice is random and it never selects an account that already returned a result for the same task. Two accounts
- * that try to confirm each other therefore cannot decide when they meet, which is the collusion problem of section
- * 12.2 of the design note. A preference for workers that appear unrelated will be added later.
+ * The choice is random and it never selects an account that already returned a result for the same task, nor the
+ * account that requested the task. Two accounts that try to confirm each other therefore cannot decide when they meet,
+ * which is the collusion problem of section 12.2 of the design note. A preference for workers that appear unrelated
+ * will be added later.
  */
 export class ValidatorSelector {
 	/** Every device able to execute a task. */
@@ -74,7 +75,7 @@ export class ValidatorSelector {
 	 * @returns The assignment of the duplicated copy, or `undefined` when every account is excluded or set aside.
 	 */
 	chooseValidator(task: Task, excludedAccountIds: AccountId[]): TaskAssignment | undefined {
-		const candidateDevices = this._candidateDevices(excludedAccountIds);
+		const candidateDevices = this._candidateDevices(task, excludedAccountIds);
 		return this._assignOneOf(task, candidateDevices);
 	}
 
@@ -89,7 +90,7 @@ export class ValidatorSelector {
 	 * @returns The assignment of the deciding copy, or `undefined` when every account is excluded or set aside.
 	 */
 	chooseArbiter(task: Task, excludedAccountIds: AccountId[]): TaskAssignment | undefined {
-		const candidateDevices = this._candidateDevices(excludedAccountIds);
+		const candidateDevices = this._candidateDevices(task, excludedAccountIds);
 		if (candidateDevices.length === 0) {
 			return undefined;
 		}
@@ -105,11 +106,18 @@ export class ValidatorSelector {
 	/**
 	 * Returns the devices that may receive a copy of a task right now.
 	 *
+	 * The account that requested the task is left out with the accounts that already answered, because an account
+	 * confirming a result of a task it asked for is not a second opinion.
+	 *
+	 * @param task The task to duplicate.
 	 * @param excludedAccountIds The accounts that already returned a result for this task.
 	 * @returns The devices that are neither excluded nor set aside.
 	 */
-	private _candidateDevices(excludedAccountIds: AccountId[]): Device[] {
+	private _candidateDevices(task: Task, excludedAccountIds: AccountId[]): Device[] {
 		return this._devices.filter((device) => {
+			if (device.accountId === task.requesterAccountId) {
+				return false;
+			}
 			if (excludedAccountIds.includes(device.accountId) === true) {
 				return false;
 			}
