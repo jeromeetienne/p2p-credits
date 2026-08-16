@@ -30,7 +30,7 @@ npm run example:parameter_sweeps
 
 ## Layout
 
-- `src/`: the library. Its one public interface is `src/index.ts`.
+- `src/`: the library. Its one public interface is `src/index.ts` — see [its README](src/README.md).
 - `examples/first_simulation/`: the first scenario, which uses the library exactly as an external user would — see [its README](examples/first_simulation/README.md).
 - `examples/parameter_sweeps/`: the same scenario at many values of one parameter at a time, judged against the three conditions the network has to meet at once — see [its README](examples/parameter_sweeps/README.md).
 - `tests/`: the tests of the library, one file per part of the library.
