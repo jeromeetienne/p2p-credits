@@ -33,12 +33,14 @@ npm run example:parameter_sweeps
 - `src/`: the library. Its one public interface is `src/index.ts`.
 - `examples/first_simulation/`: the first scenario, which uses the library exactly as an external user would.
 - `examples/parameter_sweeps/`: the same scenario at many values of one parameter at a time, judged against the three conditions the network has to meet at once.
+- `tests/`: the tests of the library, one file per part of the library.
 - `docs/design_note.md`: the design note the whole repository implements.
 
 Each folder holds a `CONTEXT.md` that states what the folder is responsible for and which boundary must not be broken.
 
 ## Commands
 
+- `npm test`: run every test of `tests/`.
 - `npm run typecheck`: type check `src`, `examples`, and `tests`, and emit nothing.
 - `npm run build`: compile `src` into `dist/`, with the declaration files. The examples are never published.
 - `npm run example:first_simulation`: run the first scenario.

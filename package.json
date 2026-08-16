@@ -16,6 +16,7 @@
 		"dist"
 	],
 	"scripts": {
+		"test": "node --import tsx --test tests/*.test.ts",
 		"typecheck": "tsc --noEmit",
 		"build": "tsc --project tsconfig.build.json",
 		"example:first_simulation": "tsx examples/first_simulation/main.ts",

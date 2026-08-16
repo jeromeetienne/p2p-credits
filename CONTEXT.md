@@ -6,7 +6,9 @@ This repository holds a credit accounting library for a peer-to-peer inference n
 ## Key Exports & Entry Points
 - `src/`: the library, whose one public interface is `src/index.ts` — see its own CONTEXT.md.
 - `examples/`: the scenarios that run over the library — see its own CONTEXT.md.
+- `tests/`: the tests of the library — see its own CONTEXT.md.
 - `docs/design_note.md`: the design note the whole repository implements.
+- Command to run the tests: `npm test`
 - Command to type check this folder: `npm run typecheck`
 - Command to build the library: `npm run build`
 - Command to run the first simulation: `npm run example:first_simulation`
