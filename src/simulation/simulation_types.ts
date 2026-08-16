@@ -249,6 +249,19 @@ export type SimulationReport = {
 	executionCount: number;
 	/** Number of executions that were duplicated copies created to validate a first result. */
 	validationCopyExecutionCount: number;
+	/** Number of executions asked for to settle a disagreement, which is the cost of the third opinion. */
+	arbiterExecutionCount: number;
+	/**
+	 * Average number of ticks between the first wrong result of an account and the first time the network rejected
+	 * one of its results, or `undefined` when no account was ever caught.
+	 */
+	averageDetectionDelayTicks: number | undefined;
+	/** Largest amount one single account was paid for wrong results before it was ever caught, in credits. */
+	largestLossBeforeFirstRejection: number;
+	/** Average number of ticks a worker waits between being paid and being able to spend. */
+	averageSpendableDelayTicks: number;
+	/** Share of the credits held by the richest tenth of the accounts, between 0 and 1. */
+	creditShareOfRichestTenth: number;
 	/** Share of the executions that were spent on validation only, between 0 and 1. */
 	validationOverheadRatio: number;
 	/** Number of returned values that were not the correct value of the task. */

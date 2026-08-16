@@ -8,6 +8,9 @@ The primitives that run a simulated network over the rest of the library: virtua
 - `simulation_types.ts`: `SimulationParameters` and `SimulationReport`, what a run receives and what a run measures.
 - `worker_behavior.ts`: the honest worker, the unstable worker, and the malicious worker.
 - `metrics_collector.ts`: the counters of a run and the report built from them.
+- `report_summary.ts`: `ReportSummary.summarize(...)` turns those counters into the four families of metrics.
+- `operating_region.ts`: `OperatingRegion.judge(...)` says whether one run met the three conditions of section 15.
+- `parameter_sweep.ts`: `ParameterSweep.run(...)` runs one scenario at several values of one parameter, several seeds each.
 - `random_generator.ts`: the seeded source of randomness.
 - `simulation_clock.ts`: the virtual time, counted in ticks.
 
@@ -18,6 +21,7 @@ The primitives that run a simulated network over the rest of the library: virtua
 - The benchmark of a run is measured with noise, so the prices the network uses are wrong by a few percent, as they always are in reality.
 - The engine owns no rule of its own. It composes the price, the trust, the validation, the scheduling, and the ledger, exactly as a real network would.
 - Nothing outside this folder imports from it, apart from `index.ts`.
+- A metric that two runs are compared by is a share or an average, never a count. A run that executes half as many tasks meets half as much fraud, and that says nothing about how safe it was.
 
 ## Background
 - The kinds of worker and what a run must model come from section 9 of [the design note](../../docs/design_note.md), the parameters from section 10, and the measured metrics from section 11.

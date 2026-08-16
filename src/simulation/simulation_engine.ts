@@ -501,20 +501,21 @@ export class SimulationEngine {
 	}
 
 	/**
-	 * Adds up what every Sybil attacker was paid, takes off what was taken back from it, and takes off what opening
-	 * its accounts cost.
+	 * Adds up everything every Sybil attacker took out of the network, and takes off what opening its accounts cost.
 	 *
-	 * What the attacker then chose to spend those credits on is not counted, because spending them is the point of
-	 * stealing them, not a loss.
+	 * What the attacker took out is the work the network executed for it, plus whatever credits its accounts still
+	 * hold and could still spend. The work it had executed counts whether or not the account ever paid for it: an
+	 * account abandoned while it owes credits never pays that debt, and the network carries it.
 	 *
 	 * @returns The profit of the attack, in credits. A number at or below zero means it did not pay for itself.
 	 */
 	private _sybilAttackerProfit(): number {
-		let keptCredits = 0;
+		let takenOut = 0;
 		for (const accountId of this._sybilAccountIds) {
-			keptCredits += this._ledger.earnedTotalOf(accountId) + this._ledger.adjustmentTotalOf(accountId);
+			takenOut += this._ledger.consumedTotalOf(accountId);
+			takenOut += Math.max(0, this._ledger.balanceOf(accountId));
 		}
-		return keptCredits - this._sybilAccountIds.length * this._accountRegistry.identityCost();
+		return takenOut - this._sybilAccountIds.length * this._accountRegistry.identityCost();
 	}
 
 	/**
@@ -708,7 +709,7 @@ export class SimulationEngine {
 
 		const allResults = [...simulatedResults];
 		if (arbiterAssignment !== undefined) {
-			allResults.push(this._executeAssignment(task, arbiterAssignment, trueVector));
+			allResults.push(this._executeAssignment(task, arbiterAssignment, trueVector, true));
 		}
 
 		const majorityOutcome = this._resolve(task, allResults);
@@ -764,6 +765,7 @@ export class SimulationEngine {
 		task: Task,
 		taskAssignment: TaskAssignment,
 		trueVector: number[],
+		isArbiterCopy = false,
 	): SimulatedResult {
 		const workerProfile = this._workerProfileByAccountId.get(taskAssignment.accountId);
 		if (workerProfile === undefined) {
@@ -782,7 +784,13 @@ export class SimulationEngine {
 			resultValue: producedResult.resultValue,
 			completedAtTick: this._simulationClock.currentTick(),
 		};
-		this._metricsCollector.recordExecution(taskAssignment.isValidationCopy, producedResult.isGenuine);
+		this._metricsCollector.recordExecution({
+			accountId: taskAssignment.accountId,
+			isValidationCopy: taskAssignment.isValidationCopy,
+			isArbiterCopy: isArbiterCopy,
+			isGenuine: producedResult.isGenuine,
+			tick: this._simulationClock.currentTick(),
+		});
 		return {
 			taskResult: taskResult,
 			isGenuine: producedResult.isGenuine,
@@ -833,7 +841,12 @@ export class SimulationEngine {
 		if (trustChange.confiscatesUnverifiedCredits === true) {
 			this._confiscateUnverifiedCredits(taskResult);
 		}
-		this._metricsCollector.recordRejectedResult(simulatedResult.isGenuine, task.taskTypeName);
+		this._metricsCollector.recordRejectedResult({
+			accountId: taskResult.accountId,
+			isGenuine: simulatedResult.isGenuine,
+			taskTypeName: task.taskTypeName,
+			tick: tick,
+		});
 	}
 
 	/**
@@ -914,6 +927,11 @@ export class SimulationEngine {
 		if (truePrice === undefined) {
 			throw new Error(`the task type "${task.taskTypeName}" has no true price`);
 		}
-		this._metricsCollector.recordPaidResult(simulatedResult.isGenuine, price, truePrice);
+		this._metricsCollector.recordPaidResult({
+			accountId: simulatedResult.taskResult.accountId,
+			isGenuine: simulatedResult.isGenuine,
+			amount: price,
+			trueAmount: truePrice,
+		});
 	}
 }

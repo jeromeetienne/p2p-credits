@@ -128,6 +128,25 @@ export class Ledger {
 	}
 
 	/**
+	 * Returns everything an account ever had the network execute for it.
+	 *
+	 * This is what an account took out of the network, whether or not it ever paid for it, and it is the number a
+	 * measure of what an abandoned account cost has to read.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @returns The amount consumed, in credits.
+	 */
+	consumedTotalOf(accountId: AccountId): number {
+		let total = 0;
+		for (const ledgerEntry of this.entriesOf(accountId)) {
+			if (ledgerEntry.entryType === 'debit') {
+				total += ledgerEntry.amount;
+			}
+		}
+		return total;
+	}
+
+	/**
 	 * Returns the sum of the corrections recorded for an account, which is negative when credits were taken back.
 	 *
 	 * @param accountId Identifier of the account.

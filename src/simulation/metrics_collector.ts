@@ -21,6 +21,54 @@ import type { WorkerBehaviorName, WorkerProfile } from './worker_behavior.js';
 ///////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////
 
+/** One execution, as the counters see it. */
+export type RecordedExecution = {
+	/** Identifier of the account that executed. */
+	accountId: AccountId;
+	/** True when the execution was a duplicated copy created to validate a first result. */
+	isValidationCopy: boolean;
+	/** True when the execution was the copy asked for to settle a disagreement. */
+	isArbiterCopy: boolean;
+	/** True when the worker really performed the computation. */
+	isGenuine: boolean;
+	/** The tick the execution happened at. */
+	tick: number;
+};
+
+/** One payment, as the counters see it. */
+export type RecordedPayment = {
+	/** Identifier of the account that was paid. */
+	accountId: AccountId;
+	/** True when the worker really performed the computation. */
+	isGenuine: boolean;
+	/** Amount paid, in credits. */
+	amount: number;
+	/** Amount the network would have paid if the benchmark had measured the true cost, in credits. */
+	trueAmount: number;
+};
+
+/** One rejection, as the counters see it. */
+export type RecordedRejection = {
+	/** Identifier of the account whose result was rejected. */
+	accountId: AccountId;
+	/** True when the worker really performed the computation. */
+	isGenuine: boolean;
+	/** Name of the type of the rejected task. */
+	taskTypeName: TaskTypeName;
+	/** The tick the rejection happened at. */
+	tick: number;
+};
+
+/** What one account did wrong, and when the network first noticed. */
+type AccountCounters = {
+	/** Tick of the first result of this account that was not genuinely computed. */
+	firstWrongResultTick: number | undefined;
+	/** Tick of the first result of this account the network rejected. */
+	firstRejectionTick: number | undefined;
+	/** Credits this account was paid for results that were not genuine, before it was rejected once. */
+	creditsForWrongResultsBeforeFirstRejection: number;
+};
+
 /** Everything the report of a run is read from, once the run is over. */
 export type ReportInputs = {
 	/** Number of ticks the run lasted. */
@@ -61,6 +109,12 @@ export class MetricsCollector {
 
 	/** Number of executions that were duplicated copies. */
 	private _validationCopyExecutionCount = 0;
+
+	/** Number of executions asked for to settle a disagreement. */
+	private _arbiterExecutionCount = 0;
+
+	/** What each account did wrong, and when the network first noticed, indexed by the identifier of the account. */
+	private _countersByAccountId = new Map<AccountId, AccountCounters>();
 
 	/** Number of returned values that were not the correct value of the task. */
 	private _wrongResultCount = 0;
@@ -116,50 +170,64 @@ export class MetricsCollector {
 	/**
 	 * Records that one worker executed one task, or one duplicated copy of a task.
 	 *
-	 * @param isValidationCopy True when the execution was a duplicated copy created to validate a first result.
-	 * @param isResultCorrect True when the worker returned the correct value of the task.
+	 * @param execution What was executed, by whom, and whether the work was really performed.
 	 * @returns Nothing.
 	 */
-	recordExecution(isValidationCopy: boolean, isResultCorrect: boolean): void {
+	recordExecution(execution: RecordedExecution): void {
 		this._executionCount += 1;
-		if (isValidationCopy === true) {
+		if (execution.isValidationCopy === true) {
 			this._validationCopyExecutionCount += 1;
 		}
-		if (isResultCorrect === false) {
+		if (execution.isArbiterCopy === true) {
+			this._arbiterExecutionCount += 1;
+		}
+		if (execution.isGenuine === false) {
 			this._wrongResultCount += 1;
+			const accountCounters = this._accountCountersOf(execution.accountId);
+			if (accountCounters.firstWrongResultTick === undefined) {
+				accountCounters.firstWrongResultTick = execution.tick;
+			}
 		}
 	}
 
 	/**
 	 * Records that the network paid a worker for a result.
 	 *
-	 * @param isResultCorrect True when the paid value was the correct value of the task.
-	 * @param amount Amount paid, in credits.
-	 * @param trueAmount Amount the network would have paid if the benchmark had measured the true cost, in credits.
+	 * @param payment What was paid, to whom, and whether the work was really performed.
 	 * @returns Nothing.
 	 */
-	recordPaidResult(isResultCorrect: boolean, amount: number, trueAmount: number): void {
-		this._creditsCreatedByPricingError += amount - trueAmount;
-		if (isResultCorrect === false) {
-			this._wrongResultUndetectedCount += 1;
-			this._creditsAwardedForWrongResults += amount;
+	recordPaidResult(payment: RecordedPayment): void {
+		this._creditsCreatedByPricingError += payment.amount - payment.trueAmount;
+		if (payment.isGenuine === true) {
+			return;
+		}
+		this._wrongResultUndetectedCount += 1;
+		this._creditsAwardedForWrongResults += payment.amount;
+
+		const accountCounters = this._accountCountersOf(payment.accountId);
+		if (accountCounters.firstRejectionTick === undefined) {
+			accountCounters.creditsForWrongResultsBeforeFirstRejection += payment.amount;
 		}
 	}
 
 	/**
 	 * Records that the network rejected a result and paid nothing for it.
 	 *
-	 * @param isResultCorrect True when the rejected result was genuinely computed by its worker.
-	 * @param taskTypeName Name of the type of the rejected task.
+	 * @param rejection What was rejected, from whom, and whether the work was really performed.
 	 * @returns Nothing.
 	 */
-	recordRejectedResult(isResultCorrect: boolean, taskTypeName: TaskTypeName): void {
-		if (isResultCorrect === false) {
+	recordRejectedResult(rejection: RecordedRejection): void {
+		const accountCounters = this._accountCountersOf(rejection.accountId);
+		if (accountCounters.firstRejectionTick === undefined) {
+			accountCounters.firstRejectionTick = rejection.tick;
+		}
+
+		if (rejection.isGenuine === false) {
 			this._wrongResultDetectedCount += 1;
 			return;
 		}
 		this._correctResultRejectedCount += 1;
-		const counters = this._validationCountersOf(taskTypeName);
+		const counters = this._validationCountersOf(rejection.taskTypeName);
 		counters.genuineResultRejectedCount += 1;
 	}
 
@@ -282,6 +350,14 @@ export class MetricsCollector {
 			taskCount: this._taskCount,
 			executionCount: this._executionCount,
 			validationCopyExecutionCount: this._validationCopyExecutionCount,
+			arbiterExecutionCount: this._arbiterExecutionCount,
+			averageDetectionDelayTicks: this._averageDetectionDelayTicks(),
+			largestLossBeforeFirstRejection: this._largestLossBeforeFirstRejection(),
+			averageSpendableDelayTicks: MetricsCollector._averageSpendableDelayTicks(ledger),
+			creditShareOfRichestTenth: MetricsCollector._creditShareOfRichestTenth(
+				ledger,
+				reportInputs.accountRegistry,
+			),
 			validationOverheadRatio: validationOverheadRatio,
 			wrongResultCount: this._wrongResultCount,
 			wrongResultDetectedCount: this._wrongResultDetectedCount,
@@ -313,6 +389,122 @@ export class MetricsCollector {
 			deviceSummaries: reportInputs.deviceSummaries,
 			taskTypeValidationSummaries: Array.from(this._validationCountersByTaskTypeName.values()),
 		};
+	}
+
+	/**
+	 * Returns the average number of ticks a worker waits between being paid and being able to spend.
+	 *
+	 * @param ledger The ledger of the run.
+	 * @returns The average wait in ticks, which is 0 when nobody was ever paid.
+	 */
+	private static _averageSpendableDelayTicks(ledger: Ledger): number {
+		let totalDelay = 0;
+		let creditCount = 0;
+		for (const ledgerEntry of ledger.allEntries()) {
+			if (ledgerEntry.entryType !== 'credit') {
+				continue;
+			}
+			totalDelay += ledgerEntry.spendableFromTick - ledgerEntry.tick;
+			creditCount += 1;
+		}
+		if (creditCount === 0) {
+			return 0;
+		}
+		return totalDelay / creditCount;
+	}
+
+	/**
+	 * Returns the share of the credits held by the richest tenth of the accounts.
+	 *
+	 * A network where a few accounts hold everything is a network where the credits stopped circulating, whoever
+	 * earned them honestly.
+	 *
+	 * @param ledger The ledger of the run.
+	 * @param accountRegistry The accounts opened during the run.
+	 * @returns The share held by the richest tenth, between 0 and 1.
+	 */
+	private static _creditShareOfRichestTenth(ledger: Ledger, accountRegistry: AccountRegistry): number {
+		const positiveBalances: number[] = [];
+		let totalBalance = 0;
+		for (const account of accountRegistry.allAccounts()) {
+			const balance = ledger.balanceOf(account.accountId);
+			if (balance <= 0) {
+				continue;
+			}
+			positiveBalances.push(balance);
+			totalBalance += balance;
+		}
+		if (positiveBalances.length === 0 || totalBalance === 0) {
+			return 0;
+		}
+
+		const balancesFromRichest = [...positiveBalances].sort((balanceA, balanceB) => {
+			return balanceB - balanceA;
+		});
+		const richestCount = Math.max(1, Math.round(balancesFromRichest.length / 10));
+		let richestBalance = 0;
+		for (let index = 0; index < richestCount; index += 1) {
+			richestBalance += balancesFromRichest[index] ?? 0;
+		}
+		return richestBalance / totalBalance;
+	}
+
+	/**
+	 * Returns the counters of one account, and opens them the first time that account is seen.
+	 *
+	 * @param accountId Identifier of the account.
+	 * @returns The counters of that account.
+	 */
+	private _accountCountersOf(accountId: AccountId): AccountCounters {
+		const existingCounters = this._countersByAccountId.get(accountId);
+		if (existingCounters !== undefined) {
+			return existingCounters;
+		}
+		const openedCounters: AccountCounters = {
+			firstWrongResultTick: undefined,
+			firstRejectionTick: undefined,
+			creditsForWrongResultsBeforeFirstRejection: 0,
+		};
+		this._countersByAccountId.set(accountId, openedCounters);
+		return openedCounters;
+	}
+
+	/**
+	 * Returns the average number of ticks between the first wrong result of an account and the first time the
+	 * network rejected one of its results.
+	 *
+	 * @returns The average delay in ticks, or `undefined` when no account was ever caught.
+	 */
+	private _averageDetectionDelayTicks(): number | undefined {
+		let totalDelay = 0;
+		let caughtAccountCount = 0;
+		for (const accountCounters of this._countersByAccountId.values()) {
+			const firstWrongResultTick = accountCounters.firstWrongResultTick;
+			const firstRejectionTick = accountCounters.firstRejectionTick;
+			if (firstWrongResultTick === undefined || firstRejectionTick === undefined) {
+				continue;
+			}
+			totalDelay += Math.max(0, firstRejectionTick - firstWrongResultTick);
+			caughtAccountCount += 1;
+		}
+		if (caughtAccountCount === 0) {
+			return undefined;
+		}
+		return totalDelay / caughtAccountCount;
+	}
+
+	/**
+	 * Returns the largest amount one single account was paid for results that were not genuine before the network
+	 * rejected any of its results.
+	 *
+	 * @returns The largest loss caused by one account before it was caught once, in credits.
+	 */
+	private _largestLossBeforeFirstRejection(): number {
+		let largestLoss = 0;
+		for (const accountCounters of this._countersByAccountId.values()) {
+			largestLoss = Math.max(largestLoss, accountCounters.creditsForWrongResultsBeforeFirstRejection);
+		}
+		return largestLoss;
 	}
 
 	/**

@@ -95,6 +95,12 @@ export type { ReportInputs } from './simulation/metrics_collector.js';
 export { RandomGenerator } from './simulation/random_generator.js';
 export { SimulationClock } from './simulation/simulation_clock.js';
 export { SimulationEngine } from './simulation/simulation_engine.js';
+export { ReportSummary } from './simulation/report_summary.js';
+export type { SimulationSummary } from './simulation/report_summary.js';
+export { OperatingRegion } from './simulation/operating_region.js';
+export type { OperatingRegionLimits, OperatingRegionVerdict } from './simulation/operating_region.js';
+export { ParameterSweep } from './simulation/parameter_sweep.js';
+export type { SweepPoint, SweepResult } from './simulation/parameter_sweep.js';
 export type {
 	DeviceSummary,
 	RefusedTaskCount,

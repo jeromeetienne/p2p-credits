@@ -18,7 +18,8 @@
 	"scripts": {
 		"typecheck": "tsc --noEmit",
 		"build": "tsc --project tsconfig.build.json",
-		"example:first_simulation": "tsx examples/first_simulation/main.ts"
+		"example:first_simulation": "tsx examples/first_simulation/main.ts",
+		"example:parameter_sweeps": "tsx examples/parameter_sweeps/main.ts"
 	},
 	"dependencies": {
 		"zod": "^4.4.3"
