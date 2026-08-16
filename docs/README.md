@@ -8,8 +8,8 @@ The documents are split into four folders, and the split is by the question the 
 |---|---|---|
 | [`tutorial/`](tutorial/) | Has never run the repository. | Numbered lessons, followed in order, from the first command to a report that can be read. |
 | [`guides/`](guides/) | Knows the vocabulary and has one task to perform. | One document per task, each one complete on its own. |
-| [`reference/`](reference/) | Wants the exact parameters of one exported name. | One document per folder of `src/`, holding only what `src/index.ts` exports. |
 | [`explanation/`](explanation/) | Wants to know why the design is the way it is. | The design note, and one document per decision the design note left open. |
+| [`reference/`](reference/) | Wants the exact parameters of one exported name. | One document per folder of `src/`, holding only what `src/index.ts` exports. |
 
 ## Where to start
 
