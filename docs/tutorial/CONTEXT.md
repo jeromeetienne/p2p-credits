@@ -4,6 +4,7 @@
 Numbered lessons for a reader who has never run this repository, followed in order, from the first command to a report that can be read and then changed.
 
 ## Key Exports & Entry Points
+- `README.md`: the entry point of this folder, which lists the lessons in order.
 - `01_first_simulation.md`: from `npm install` to a printed report.
 - `02_reading_the_report.md`: what each measured number means, and which value of it is bad.
 - `03_changing_one_parameter.md`: run a parameter sweep, and read where the network stops working.

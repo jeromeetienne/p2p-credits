@@ -4,6 +4,7 @@
 Why the design is the way it is: the design note the whole repository implements, and one document per decision the design note left open.
 
 ## Key Exports & Entry Points
+- `README.md`: the entry point of this folder, which lists one line per explanation document.
 - `design_note.md`: a copy of [issue #1](https://github.com/jeromeetienne/p2p-credits/issues/1), which stays the authoritative version.
 - `three_separate_questions.md`: why the price, the trust, and the validity never import each other.
 - `when_a_payment_becomes_spendable.md`: the balance against the spendable balance.

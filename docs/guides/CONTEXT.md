@@ -4,6 +4,7 @@
 One document per task, for a reader who already knows the vocabulary and has come here to perform that one task.
 
 ## Key Exports & Entry Points
+- `README.md`: the entry point of this folder, which lists one line per guide.
 - `price_a_new_task_type.md`: measure a reference cost, and add the task type.
 - `choose_a_settlement_policy.md`: immediate credit, provisional credit, or delayed settlement.
 - `choose_a_penalty.md`: the five penalties, and what each one costs an honest worker.
