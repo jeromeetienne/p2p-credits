@@ -34,13 +34,13 @@ The hypothesis survives, but only in a weakened form.
 
 **Raising the initial trust makes verification cheap and makes fraud pay, in the same movement.** Trust extended to an account nobody has seen is a subsidy, and an attacker collects it as readily as a newcomer.
 
-**The tuned scenario meets two conditions and fails the third — and fails it on a floor, not on an attack.** Holding the tuned parameters, the fraud condition and the friction condition are met at once, which none of the single sweeps manage. The cost condition is missed: about 23 percent of the computing power spent validating against a limit of 20 percent, and about 21 percent of it with no attacker in the scenario at all.
+**The tuned scenario fails one condition at a time rather than three, and the condition it fails changes with the number of attackers.** With no attacker in the scenario at all it spends 16 percent of the computing power validating, inside the limit of 20 percent, and it still refuses 15 percent of the tasks of honest workers against a limit of 10 percent. Add two attackers and the friction falls to 9 percent while the validation cost climbs to 25 percent.
 
-That last number is the important one. The bill is not the cost of catching cheats. It is the cost of verifying newcomers, and it is there whether or not anybody is cheating.
+That movement is the important one. Neither number is the cost of catching cheats on its own: the cost of verifying newcomers is there whether or not anybody is cheating, and it is paid either in computing power spent verifying or in tasks refused to a newcomer that has not contributed yet.
 
 ## What that means for the hypothesis
 
-The hypothesis says fraud can be made unprofitable while validating only a small fraction of tasks. What the sweeps show is that fraud can be made unprofitable — the tuned scenario does it — and that the fraction of tasks validated does not end up small, because the floor is set by how much verification a newcomer needs before it can be trusted cheaply, and every network keeps meeting newcomers.
+The hypothesis says fraud can be made unprofitable while validating only a small fraction of tasks. What the sweeps show is that fraud can be made unprofitable — the tuned scenario does it, at every number of attackers up to four — and that the price of it is paid somewhere else every time. Held to a validation cost inside the limit, the network refuses too many tasks to honest newcomers; opened up so that a newcomer is refused nothing, it validates more than the limit allows. The floor is set by how much verification a newcomer needs before it can be trusted cheaply, and every network keeps meeting newcomers.
 
 Three routes out of that are visible from here, and none of them has been measured.
 

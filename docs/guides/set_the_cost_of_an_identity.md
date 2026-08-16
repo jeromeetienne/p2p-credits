@@ -4,7 +4,7 @@ An attacker that gets caught opens another account. An identity made only of a c
 
 The goal is not to prevent the creation of new identities. The goal is that creating disposable accounts in bulk is worth less than behaving honestly.
 
-## The three parameters that decide it
+## The four parameters that decide it
 
 | Parameter | What it sets |
 |---|---|

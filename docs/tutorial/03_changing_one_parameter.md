@@ -40,7 +40,7 @@ Then try `allowedInitialDeficit`, which is how far below zero an account that ha
 
 The verdict is `no` at every value of every sweep, and the hypothesis of section 15 survives only in a weakened form. [The central hypothesis](../explanation/the_central_hypothesis.md) states what was measured and what it means.
 
-The short version: the tuned scenario satisfies the fraud condition and the friction condition at once, which none of the single sweeps manage, and it fails the cost condition. It spends about 23 percent of the computing power validating against a limit of 20 percent, and about 21 percent of it even with no attacker at all. That floor is the cost of verifying newcomers, not the cost of catching anybody.
+The short version: the tuned scenario comes closest, and it fails one condition at a time rather than three. With no attacker at all it spends 16 percent of the computing power validating, inside the limit of 20 percent, and it still refuses 15 percent of the tasks of honest workers against a limit of 10 percent. Add two attackers and the friction falls to 9 percent while the validation cost climbs to 25 percent. The two conditions trade against each other instead of holding together.
 
 ## Where to go next
 
